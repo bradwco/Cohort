@@ -15,6 +15,8 @@ import { loadOnboarding, saveOnboarding, type OnboardingData } from './state/onb
 import { OnboardingPage } from './onboarding/page';
 import {
   completeAuthRedirect,
+  completeDeepLinkAuth,
+  getSavedAuthSession,
   hasAuthRedirectParams,
   mergeSessionIntoOnboarding,
   persistSignedInUserProfile,
@@ -57,9 +59,11 @@ function getInitialAppState(): {
 
 function DashboardApp({
   profile,
+  userId,
   onSignOut,
 }: {
   profile: OnboardingData;
+  userId: string | null;
   onSignOut: () => void;
 }) {
   const [activeView, setActiveView] = useState<ViewId>('network');
@@ -106,7 +110,7 @@ function DashboardApp({
   useEffect(() => {
     if (!window.api) return;
 
-    window.api.onOwnState((raw) => {
+    const cleanup = window.api.onOwnState((raw) => {
       const data = raw as OwnStatePayload;
       pushTelemetry('focus-orb/own/state', data);
 
@@ -126,6 +130,7 @@ function DashboardApp({
         setLiftCount((c) => c + 1);
       }
     });
+    return () => { cleanup(); };
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   function handleSessionEnd() {
@@ -179,6 +184,7 @@ function DashboardApp({
         <div className="px-10 pb-16">
           {activeView === 'network' && (
             <NetworkView
+              userId={userId}
               secondsLeft={secondsLeft}
               fmt={fmt}
               taskColor={taskColor}
@@ -231,6 +237,29 @@ export default function App() {
   useEffect(() => {
     setProfile(loadOnboarding());
   }, [authenticated]);
+
+  // Handle cohort:// deep links forwarded from the Electron main process.
+  // This fires when the user clicks a Supabase email magic link or is
+  // redirected back from Google OAuth — both now route through the custom protocol.
+  useEffect(() => {
+    if (!window.api?.onDeepLink) return;
+    const cleanup = window.api.onDeepLink(async (url) => {
+      setCheckingAuth(true);
+      try {
+        const session = await completeDeepLinkAuth(url);
+        if (session) {
+          const nextProfile = mergeSessionIntoOnboarding(loadOnboarding(), session);
+          await persistSignedInUserProfile(nextProfile, session);
+          saveOnboarding(nextProfile);
+          setProfile(nextProfile);
+          setAuthenticated(true);
+        }
+      } finally {
+        setCheckingAuth(false);
+      }
+    });
+    return () => { cleanup(); };
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     if (!checkingAuth) return;
@@ -291,5 +320,6 @@ export default function App() {
     setAuthenticated(false);
   };
 
-  return <DashboardApp profile={profile} onSignOut={handleSignOut} />;
+  const userId = getSavedAuthSession()?.userId ?? null;
+  return <DashboardApp profile={profile} userId={userId} onSignOut={handleSignOut} />;
 }

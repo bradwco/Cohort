@@ -81,9 +81,9 @@ export function Sidebar({ activeView, onSelect, profile }: Props) {
             <div className="font-mono text-[10px] uppercase tracking-[0.1em] text-amber">
               dock connected
             </div>
-            <div className="mt-0.5 font-mono text-[9px] text-ink-faint">
+            {/* <div className="mt-0.5 font-mono text-[9px] text-ink-faint">
               192.168.1.42 · 24ms
-            </div>
+            </div> */}
           </div>
         </div>
         <div className="flex items-center gap-2.5 rounded px-2.5 py-2">

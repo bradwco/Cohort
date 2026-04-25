@@ -125,6 +125,7 @@ export function OnboardingPage({ onAuthenticated }: Props) {
       onNext={next}
       onPrevious={previous}
       onComplete={complete}
+      onSignIn={() => onboarding.setStep('auth')}
     >
       <AnimatePresence mode="wait">
         {renderedStep()}

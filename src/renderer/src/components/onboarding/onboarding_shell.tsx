@@ -20,6 +20,7 @@ type Props = {
   onNext: () => void;
   onPrevious: () => void;
   onComplete: () => void;
+  onSignIn: () => void;
 };
 
 export function OnboardingShell({
@@ -29,6 +30,7 @@ export function OnboardingShell({
   onNext,
   onPrevious,
   onComplete,
+  onSignIn,
 }: Props) {
   const atStart = activeIndex === 0;
   const atAuth = activeStep === 'auth';
@@ -105,6 +107,16 @@ export function OnboardingShell({
             animate="show"
             className="mt-auto border-t border-line pt-5"
           >
+            {!atAuth && (
+              <button
+                type="button"
+                onClick={onSignIn}
+                className="mb-4 w-full text-left font-mono text-[9px] tracking-wide text-ink-faint transition-colors hover:text-ink-dim"
+              >
+                Already have an account?{' '}
+                <span className="underline underline-offset-2">sign in</span>
+              </button>
+            )}
             <div className="mb-3 flex items-center justify-between font-mono text-[10px] uppercase tracking-[0.12em] text-ink-faint">
               <span>onboarding</span>
               <span className="text-amber">{activeIndex + 1}/{ONBOARDING_STEPS.length}</span>

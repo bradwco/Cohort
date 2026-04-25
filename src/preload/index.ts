@@ -9,6 +9,8 @@ const api = {
 
   // Friends
   getFriends: (userId: string) => ipcRenderer.invoke(CH.FRIENDS_LIST, userId),
+  searchProfile: (username: string) => ipcRenderer.invoke(CH.PROFILE_SEARCH, username),
+  addFriend: (userId: string, friendId: string) => ipcRenderer.invoke(CH.FRIEND_ADD, userId, friendId),
 
   // Sessions
   startSession: (userId: string, workflowGroup: string, durationMins: number) =>
@@ -30,23 +32,33 @@ const api = {
     ipcRenderer.invoke(CH.MQTT_SUBSCRIBE_FRIENDS, friendIds),
   getPauseStats: () => ipcRenderer.invoke(CH.MQTT_PAUSE_STATS),
 
-  // Push listeners (hardware → renderer)
-  onMqttConnected: (cb: (data: unknown) => void) =>
-    ipcRenderer.on(PUSH.MQTT_CONNECTED, (_e, data) => cb(data)),
-  onOwnState: (cb: (data: unknown) => void) =>
-    ipcRenderer.on(PUSH.MQTT_OWN_STATE, (_e, data) => cb(data)),
-  onFriendState: (cb: (data: unknown) => void) =>
-    ipcRenderer.on(PUSH.MQTT_FRIEND_STATE, (_e, data) => cb(data)),
+  // Push listeners (hardware → renderer) — each returns a cleanup function
+  onMqttConnected: (cb: (data: unknown) => void) => {
+    const h = (_e: Electron.IpcRendererEvent, data: unknown) => cb(data);
+    ipcRenderer.on(PUSH.MQTT_CONNECTED, h);
+    return () => ipcRenderer.off(PUSH.MQTT_CONNECTED, h);
+  },
+  onOwnState: (cb: (data: unknown) => void) => {
+    const h = (_e: Electron.IpcRendererEvent, data: unknown) => cb(data);
+    ipcRenderer.on(PUSH.MQTT_OWN_STATE, h);
+    return () => ipcRenderer.off(PUSH.MQTT_OWN_STATE, h);
+  },
+  onFriendState: (cb: (data: unknown) => void) => {
+    const h = (_e: Electron.IpcRendererEvent, data: unknown) => cb(data);
+    ipcRenderer.on(PUSH.MQTT_FRIEND_STATE, h);
+    return () => ipcRenderer.off(PUSH.MQTT_FRIEND_STATE, h);
+  },
 
   // Hardware simulator (dev only)
   simulateHardware: (userId: string, payload: Record<string, unknown>) =>
     ipcRenderer.invoke(CH.HW_SIMULATE, userId, payload),
 
-  // Cleanup
-  offOwnState: (cb: (data: unknown) => void) =>
-    ipcRenderer.off(PUSH.MQTT_OWN_STATE, cb as never),
-  offFriendState: (cb: (data: unknown) => void) =>
-    ipcRenderer.off(PUSH.MQTT_FRIEND_STATE, cb as never),
+  // Deep link (custom protocol callbacks from Supabase auth)
+  onDeepLink: (cb: (url: string) => void) => {
+    const h = (_e: Electron.IpcRendererEvent, url: unknown) => cb(url as string);
+    ipcRenderer.on(PUSH.DEEP_LINK, h);
+    return () => ipcRenderer.off(PUSH.DEEP_LINK, h);
+  },
 };
 
 contextBridge.exposeInMainWorld('api', api);

@@ -4,6 +4,8 @@ import {
   getProfile,
   updateProfile,
   getFriendsWithProfiles,
+  searchProfileByUsername,
+  addFriend,
   startSession,
   endSession,
   getSessionHistory,
@@ -32,6 +34,8 @@ export function registerIpcHandlers(): void {
 
   // --- Friends ---
   ipcMain.handle(CH.FRIENDS_LIST, (_e, userId: string) => getFriendsWithProfiles(userId));
+  ipcMain.handle(CH.PROFILE_SEARCH, (_e, username: string) => searchProfileByUsername(username));
+  ipcMain.handle(CH.FRIEND_ADD, (_e, userId: string, friendId: string) => addFriend(userId, friendId));
 
   // --- Sessions ---
   ipcMain.handle(

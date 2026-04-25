@@ -14,6 +14,7 @@ const COLOR_MAP: Record<string, string> = {
 };
 
 type Props = {
+  userId: string | null;
   secondsLeft: number;
   fmt: (s: number) => string;
   taskColor: string;
@@ -28,6 +29,7 @@ type Props = {
 };
 
 export function NetworkView({
+  userId,
   secondsLeft,
   fmt,
   taskColor,
@@ -58,7 +60,7 @@ export function NetworkView({
         onSelect={onSelectGroup}
         onAdd={onAddGroup}
       />
-      <DeskMap fmt={fmt} />
+      <DeskMap userId={userId} fmt={fmt} />
     </div>
   );
 }

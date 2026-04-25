@@ -8,6 +8,8 @@ export const CH = {
 
   // Supabase — friends
   FRIENDS_LIST: 'supabase:friends-list',
+  FRIEND_ADD: 'supabase:friend-add',
+  PROFILE_SEARCH: 'supabase:profile-search',
 
   // Supabase — sessions
   SESSION_START: 'supabase:session-start',
@@ -33,4 +35,5 @@ export const PUSH = {
   MQTT_CONNECTED: 'mqtt:connected',
   MQTT_OWN_STATE: 'mqtt:own-state',
   MQTT_FRIEND_STATE: 'mqtt:friend-state',
+  DEEP_LINK: 'app:deep-link',
 } as const;

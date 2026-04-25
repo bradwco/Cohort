@@ -245,6 +245,17 @@ function mergeProfilePartial(profile: Partial<OnboardingData>, session: AuthSess
   };
 }
 
+export async function checkUsernameAvailable(username: string): Promise<boolean> {
+  if (!supabase || !username) return true;
+  const { data, error } = await supabase
+    .from('profiles')
+    .select('id')
+    .eq('username', username)
+    .limit(1);
+  if (error) return true; // fail open so UX isn't blocked on network errors
+  return !data || data.length === 0;
+}
+
 export async function sendEmailMagicLink(email: string, data: OnboardingData) {
   assertConfigured();
   window.localStorage.setItem(PENDING_PROVIDER_KEY, 'email');
@@ -285,12 +296,70 @@ export async function startGoogleAuth(data: OnboardingData) {
   window.location.href = oauth.url;
 }
 
+// In Electron the app handles cohort:// deep links so auth redirects
+// come back to the app. In a plain browser we fall back to the page URL.
 function getRedirectUrl(data?: OnboardingData) {
-  const url = new URL(`${window.location.origin}${window.location.pathname}`);
+  const isElectron = typeof window !== 'undefined' && Boolean((window as Record<string, unknown>).api);
+  const base = isElectron
+    ? 'cohort://auth-callback'
+    : `${window.location.origin}${window.location.pathname}`;
+
+  const url = new URL(base);
   if (data) {
     url.searchParams.set('cohort_profile', encodeProfile(data));
   }
   return url.toString();
+}
+
+// Called by App.tsx when a cohort:// deep link arrives via IPC.
+// Supabase redirects here after email magic link or OAuth.
+// NOTE: add cohort://** to the Supabase dashboard's "Allowed Redirect URLs".
+export async function completeDeepLinkAuth(deepLinkUrl: string): Promise<AuthSession | null> {
+  if (!supabase) return null;
+
+  let parsed: URL;
+  try {
+    parsed = new URL(deepLinkUrl);
+  } catch {
+    console.error('[auth] invalid deep link URL:', deepLinkUrl);
+    return null;
+  }
+
+  const redirectProfile = (() => {
+    const raw = parsed.searchParams.get('cohort_profile');
+    if (!raw) return undefined;
+    try { return JSON.parse(decodeURIComponent(atob(raw))) as Partial<OnboardingData>; } catch { return undefined; }
+  })();
+
+  // PKCE flow: ?code=xxx
+  const code = parsed.searchParams.get('code');
+  if (code) {
+    const { data, error } = await supabase.auth.exchangeCodeForSession(code);
+    if (error || !data.session) {
+      console.error('[auth] deep link code exchange failed:', error?.message);
+      return null;
+    }
+    if (redirectProfile) {
+      await supabase.auth.updateUser({ data: profileMetadataFromPartial(redirectProfile) });
+    }
+    return saveSupabaseSession(data.session, redirectProfile);
+  }
+
+  // Implicit flow: ?access_token=xxx (some Supabase email templates)
+  const accessToken = parsed.searchParams.get('access_token');
+  if (accessToken) {
+    const { data, error } = await supabase.auth.setSession({
+      access_token: accessToken,
+      refresh_token: parsed.searchParams.get('refresh_token') ?? '',
+    });
+    if (error || !data.session) {
+      console.error('[auth] deep link implicit auth failed:', error?.message);
+      return null;
+    }
+    return saveSupabaseSession(data.session, redirectProfile);
+  }
+
+  return null;
 }
 
 function saveSupabaseSession(

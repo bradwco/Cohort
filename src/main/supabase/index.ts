@@ -59,6 +59,25 @@ export async function updateProfile(userId: string, updates: Partial<Pick<Profil
 
 // Friends
 
+export async function searchProfileByUsername(username: string): Promise<Profile | null> {
+  const { data, error } = await getSupabaseClient()
+    .from('profiles')
+    .select('*')
+    .eq('username', username)
+    .single();
+  if (error || !data) return null;
+  return data as Profile;
+}
+
+export async function addFriend(userId: string, friendId: string): Promise<boolean> {
+  if (userId === friendId) return false;
+  const { error } = await getSupabaseClient()
+    .from('friendships')
+    .upsert({ user_id: userId, friend_id: friendId, status: 'accepted' }, { onConflict: 'user_id,friend_id' });
+  if (error) { console.error('addFriend:', error.message); return false; }
+  return true;
+}
+
 export async function getFriendsWithProfiles(userId: string): Promise<Profile[]> {
   const db = getSupabaseClient();
   const { data: friendships, error } = await db
