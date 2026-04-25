@@ -8,6 +8,7 @@
     "build": "node scripts/run.mjs electron-vite build",
     "preview": "node scripts/run.mjs electron-vite preview",
     "start": "node scripts/run.mjs electron .",
+    "dev:overlay": "node scripts/run.mjs electron overlay_standalone/main.cjs",
     "typecheck": "tsc -b"
   },
   "devDependencies": {
