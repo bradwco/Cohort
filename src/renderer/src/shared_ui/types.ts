@@ -1,4 +1,4 @@
-export type ViewId = 'network' | 'history' | 'graveyard' | 'hardware';
+export type ViewId = 'dashboard' | 'history' | 'friends' | 'orb' | 'settings';
 
 export type TelemetryEvent = {
   t: 'mqtt' | 'agent';

@@ -1,10 +1,11 @@
 import { useEffect, useRef, useState } from 'react';
 import { AnimatePresence } from 'motion/react';
 
-import { NetworkView } from './home_page/network_view';
+import { DashboardView } from './home_page/dashboard_view';
 import { HistoryView } from './history_page/history_view';
-import { GraveyardView } from './history_page/graveyard_view';
-import { HardwareView } from './settings_page/hardware_view';
+import { FriendsView } from './friends_page/friends_view';
+import { OrbView } from './orb_page/orb_view';
+import { SettingsView } from './settings_page/settings_view';
 import { Sidebar } from './shared_ui/sidebar';
 import { Header } from './shared_ui/header';
 import { Telemetry } from './shared_ui/telemetry';
@@ -68,10 +69,12 @@ function DashboardApp({
   userId: string | null;
   onSignOut: () => void;
 }) {
-  const [activeView, setActiveView] = useState<ViewId>('network');
-  const [telemetryOpen, setTelemetryOpen] = useState(true);
+  const [activeView, setActiveView] = useState<ViewId>('dashboard');
+  const [telemetryOpen, setTelemetryOpen] = useState(false);
   const [feed, setFeed] = useState<TelemetryEvent[]>([]);
   const feedRef = useRef<HTMLDivElement>(null);
+  const [currentProfile, setCurrentProfile] = useState(profile);
+  const sessionLengthRef = useRef(profile.sessionLength);
 
   const [orbStatus, setOrbStatus] = useState<OrbStatus>('offline');
   const [secondsLeft, setSecondsLeft] = useState(profile.sessionLength * 60);
@@ -82,10 +85,10 @@ function DashboardApp({
   const [groups, setGroups] = useState<string[]>([]);
   const [activeGroup, setActiveGroup] = useState<string | null>(null);
 
-  const [strictness, setStrictness] = useState<string>(profile.accountability);
   const [brightness, setBrightness] = useState(72);
   const [breathSpeed, setBreathSpeed] = useState(45);
   const [taskColor, setTaskColor] = useState(profile.avatar.background);
+  const [nudgeDnd, setNudgeDnd] = useState(false);
 
   const sessionActive = orbStatus !== 'offline';
 
@@ -144,7 +147,7 @@ function DashboardApp({
 
   function handleSessionEnd() {
     setOrbStatus('offline');
-    setSecondsLeft(profile.sessionLength * 60);
+    setSecondsLeft(sessionLengthRef.current * 60);
     setLiftCount(0);
     setTotalPauseMs(0);
     setCurrentWorkflow('');
@@ -153,6 +156,22 @@ function DashboardApp({
   function handleAddGroup(name: string) {
     setGroups((g) => (g.includes(name) ? g : [...g, name]));
     setActiveGroup(name);
+  }
+
+  function handleProfileUpdate(patch: Partial<OnboardingData>) {
+    const next = {
+      ...currentProfile,
+      ...patch,
+      preferences: patch.preferences
+        ? { ...currentProfile.preferences, ...patch.preferences }
+        : currentProfile.preferences,
+    };
+    saveOnboarding(next);
+    sessionLengthRef.current = next.sessionLength;
+    setCurrentProfile(next);
+    if (patch.sessionLength != null && orbStatus === 'offline') {
+      setSecondsLeft(next.sessionLength * 60);
+    }
   }
 
   return (
@@ -168,13 +187,13 @@ function DashboardApp({
         userId={userId}
         activeGroup={activeGroup}
         groups={groups}
-        initialDuration={profile.sessionLength}
+        initialDuration={currentProfile.sessionLength}
         onAddGroup={handleAddGroup}
         onSelectGroup={setActiveGroup}
         onSessionEnd={handleSessionEnd}
       />
 
-      <Sidebar activeView={activeView} onSelect={setActiveView} profile={profile} />
+      <Sidebar activeView={activeView} onSelect={setActiveView} profile={currentProfile} />
 
       <main
         className="min-h-screen flex-1 transition-[margin] duration-300"
@@ -188,38 +207,41 @@ function DashboardApp({
           sessionActive={sessionActive}
           telemetryOpen={telemetryOpen}
           onToggleTelemetry={() => setTelemetryOpen((t) => !t)}
-          onSignOut={onSignOut}
         />
 
         <div className="px-10 pb-16">
-          {activeView === 'network' && (
-            <NetworkView
+          {activeView === 'dashboard' && (
+            <DashboardView
               userId={userId}
+              profile={currentProfile}
               secondsLeft={secondsLeft}
               fmt={fmt}
-              taskColor={taskColor}
               orbStatus={orbStatus}
               liftCount={liftCount}
               totalPauseMs={totalPauseMs}
               currentWorkflow={currentWorkflow}
-              groups={groups}
-              activeGroup={activeGroup}
-              onSelectGroup={setActiveGroup}
-              onAddGroup={handleAddGroup}
             />
           )}
-          {activeView === 'history' && <HistoryView />}
-          {activeView === 'graveyard' && <GraveyardView />}
-          {activeView === 'hardware' && (
-            <HardwareView
-              strictness={strictness}
-              setStrictness={setStrictness}
+          {activeView === 'history' && <HistoryView userId={userId} />}
+          {activeView === 'friends' && <FriendsView userId={userId} />}
+          {activeView === 'orb' && (
+            <OrbView
               brightness={brightness}
               setBrightness={setBrightness}
               breathSpeed={breathSpeed}
               setBreathSpeed={setBreathSpeed}
               taskColor={taskColor}
               setTaskColor={setTaskColor}
+              nudgeDnd={nudgeDnd}
+              setNudgeDnd={setNudgeDnd}
+            />
+          )}
+          {activeView === 'settings' && (
+            <SettingsView
+              profile={currentProfile}
+              userId={userId}
+              onSignOut={onSignOut}
+              onProfileUpdate={handleProfileUpdate}
             />
           )}
         </div>
@@ -250,7 +272,7 @@ export default function App() {
 
   // Handle cohort:// deep links forwarded from the Electron main process.
   // This fires when the user clicks a Supabase email magic link or is
-  // redirected back from Google OAuth — both now route through the custom protocol.
+  // redirected back from Google OAuth - both now route through the custom protocol.
   useEffect(() => {
     if (!window.api?.onDeepLink) return;
     const cleanup = window.api.onDeepLink(async (url) => {

@@ -241,6 +241,7 @@ function mergeProfilePartial(profile: Partial<OnboardingData>, session: AuthSess
       silentPresence: profile.preferences?.silentPresence ?? true,
       friendNudges: profile.preferences?.friendNudges ?? true,
       groupSessions: profile.preferences?.groupSessions ?? true,
+      autoStartOnDock: profile.preferences?.autoStartOnDock ?? false,
     },
     email: profile.email || session.email || '',
     authProvider: session.provider,

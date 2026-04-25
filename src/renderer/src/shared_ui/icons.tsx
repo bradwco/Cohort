@@ -2,6 +2,46 @@ type IconProps = { active?: boolean };
 
 const stroke = (active?: boolean) => (active ? '#E8A87C' : 'currentColor');
 
+export function DashboardIcon({ active }: IconProps) {
+  return (
+    <svg width="14" height="14" viewBox="0 0 16 16" fill="none">
+      <rect x="2" y="2" width="5" height="5" rx="1" stroke={stroke(active)} strokeWidth="1.3" />
+      <rect x="9" y="2" width="5" height="5" rx="1" stroke={stroke(active)} strokeWidth="1.3" />
+      <rect x="2" y="9" width="5" height="5" rx="1" stroke={stroke(active)} strokeWidth="1.3" />
+      <rect x="9" y="9" width="5" height="5" rx="1" stroke={stroke(active)} strokeWidth="1.3" />
+    </svg>
+  );
+}
+
+export function FriendsIcon({ active }: IconProps) {
+  return (
+    <svg width="14" height="14" viewBox="0 0 16 16" fill="none">
+      <circle cx="6" cy="5" r="2.5" stroke={stroke(active)} strokeWidth="1.3" />
+      <path d="M1 13c0-2.5 2-4 5-4s5 1.5 5 4" stroke={stroke(active)} strokeWidth="1.3" strokeLinecap="round" />
+      <path d="M11 4c1.5 0 3 1 3 3M11 8.5c1.5.5 3 1.5 3 3.5" stroke={stroke(active)} strokeWidth="1.3" strokeLinecap="round" />
+    </svg>
+  );
+}
+
+export function OrbIcon({ active }: IconProps) {
+  return (
+    <svg width="14" height="14" viewBox="0 0 16 16" fill="none">
+      <circle cx="8" cy="8" r="5.5" stroke={stroke(active)} strokeWidth="1.3" />
+      <circle cx="6.5" cy="6" r="1.5" fill={stroke(active)} opacity="0.4" />
+      <path d="M8 13.5C8 13.5 12 11 12 8" stroke={stroke(active)} strokeWidth="1" strokeLinecap="round" opacity="0.5" />
+    </svg>
+  );
+}
+
+export function SettingsIcon({ active }: IconProps) {
+  return (
+    <svg width="14" height="14" viewBox="0 0 16 16" fill="none">
+      <circle cx="8" cy="8" r="2" stroke={stroke(active)} strokeWidth="1.3" />
+      <path d="M8 1v2M8 13v2M1 8h2M13 8h2M3.1 3.1l1.4 1.4M11.5 11.5l1.4 1.4M3.1 12.9l1.4-1.4M11.5 4.5l1.4-1.4" stroke={stroke(active)} strokeWidth="1.3" strokeLinecap="round" />
+    </svg>
+  );
+}
+
 export function NetworkIcon({ active }: IconProps) {
   return (
     <svg width="14" height="14" viewBox="0 0 16 16" fill="none">

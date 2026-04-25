@@ -1,7 +1,7 @@
 import type { ReactElement } from 'react';
 import { PixelOrbMini } from '../orb_character/pixel_orb_mini';
 import { PixelAvatar } from '../components/onboarding/pixel_avatar';
-import { ChipIcon, HistoryIcon, NetworkIcon, SkullIcon } from './icons';
+import { DashboardIcon, FriendsIcon, HistoryIcon, OrbIcon, SettingsIcon } from './icons';
 import { cn } from './cn';
 import type { ViewId } from './types';
 import type { OnboardingData } from '../state/onboarding';
@@ -10,14 +10,14 @@ type NavItem = {
   id: ViewId;
   label: string;
   Icon: (p: { active?: boolean }) => ReactElement;
-  count: number | null;
 };
 
 const NAV: NavItem[] = [
-  { id: 'network', label: 'Network', Icon: NetworkIcon, count: 6 },
-  { id: 'history', label: 'History', Icon: HistoryIcon, count: 23 },
-  { id: 'graveyard', label: 'Graveyard', Icon: SkullIcon, count: 4 },
-  { id: 'hardware', label: 'Hardware', Icon: ChipIcon, count: null },
+  { id: 'dashboard', label: 'Dashboard', Icon: DashboardIcon },
+  { id: 'history', label: 'History', Icon: HistoryIcon },
+  { id: 'friends', label: 'Friends', Icon: FriendsIcon },
+  { id: 'orb', label: 'Orb', Icon: OrbIcon },
+  { id: 'settings', label: 'Settings', Icon: SettingsIcon },
 ];
 
 type Props = {
@@ -62,11 +62,6 @@ export function Sidebar({ activeView, onSelect, profile }: Props) {
             >
               <item.Icon active={active} />
               <span className="flex-1 text-left">{item.label}</span>
-              {item.count !== null && (
-                <span className="rounded bg-white/[0.04] px-1.5 py-0.5 font-mono text-[10px] text-ink-faint">
-                  {item.count}
-                </span>
-              )}
             </button>
           );
         })}
