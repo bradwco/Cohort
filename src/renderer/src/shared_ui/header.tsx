@@ -12,9 +12,16 @@ type Props = {
   sessionActive: boolean;
   telemetryOpen: boolean;
   onToggleTelemetry: () => void;
+  onSignOut?: () => void;
 };
 
-export function Header({ view, sessionActive, telemetryOpen, onToggleTelemetry }: Props) {
+export function Header({
+  view,
+  sessionActive,
+  telemetryOpen,
+  onToggleTelemetry,
+  onSignOut,
+}: Props) {
   const meta = TITLES[view];
   return (
     <div className="mb-8 flex items-start justify-between gap-5 border-b border-line px-10 pb-7 pt-8">
@@ -35,6 +42,7 @@ export function Header({ view, sessionActive, telemetryOpen, onToggleTelemetry }
           </div>
         )}
         <button
+          type="button"
           onClick={onToggleTelemetry}
           className="flex items-center gap-2.5 rounded border border-line-mid bg-transparent px-3 py-1.5 text-ink-dim transition-colors hover:bg-white/[0.03]"
         >
@@ -42,9 +50,18 @@ export function Header({ view, sessionActive, telemetryOpen, onToggleTelemetry }
             {telemetryOpen ? 'HIDE' : 'SHOW'} TELEMETRY
           </span>
           <kbd className="rounded border border-line bg-white/[0.04] px-1.5 py-0.5 font-mono text-[9px] text-ink-faint">
-            ⌘ T
+            Cmd T
           </kbd>
         </button>
+        {onSignOut && (
+          <button
+            type="button"
+            onClick={onSignOut}
+            className="rounded border border-line-mid bg-transparent px-3 py-1.5 font-mono text-[11px] uppercase tracking-[0.1em] text-ink-faint transition-colors hover:border-amber/35 hover:bg-amber/[0.06] hover:text-amber"
+          >
+            Sign Out
+          </button>
+        )}
       </div>
     </div>
   );

@@ -18,6 +18,15 @@
   .tabular-nums {
     font-variant-numeric: tabular-nums;
   }
+  .no-number-spinner {
+    appearance: textfield;
+    -moz-appearance: textfield;
+  }
+  .no-number-spinner::-webkit-outer-spin-button,
+  .no-number-spinner::-webkit-inner-spin-button {
+    -webkit-appearance: none;
+    margin: 0;
+  }
   .scrollbar-thin::-webkit-scrollbar {
     width: 6px;
     height: 6px;

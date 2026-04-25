@@ -1,17 +1,24 @@
 import { useEffect, useRef, useState } from 'react';
 import { AnimatePresence } from 'motion/react';
 
+import { NetworkView } from './home_page/network_view';
+import { HistoryView } from './history_page/history_view';
+import { GraveyardView } from './history_page/graveyard_view';
+import { HardwareView } from './settings_page/hardware_view';
 import { Sidebar } from './shared_ui/sidebar';
 import { Header } from './shared_ui/header';
 import { Telemetry } from './shared_ui/telemetry';
 import { GrainOverlay } from './shared_ui/grain_overlay';
 import { HwSimulator } from './shared_ui/hw_simulator';
 import type { TelemetryEvent, ViewId } from './shared_ui/types';
-
-import { NetworkView } from './home_page/network_view';
-import { HistoryView } from './history_page/history_view';
-import { GraveyardView } from './history_page/graveyard_view';
-import { HardwareView } from './settings_page/hardware_view';
+import { loadOnboarding, saveOnboarding, type OnboardingData } from './state/onboarding';
+import { OnboardingPage } from './onboarding/page';
+import {
+  completeAuthRedirect,
+  hasAuthRedirectParams,
+  mergeSessionIntoOnboarding,
+  signOut,
+} from './lib/supabase_auth';
 
 const fmt = (s: number) =>
   `${String(Math.floor(s / 60)).padStart(2, '0')}:${String(s % 60).padStart(2, '0')}`;
@@ -26,39 +33,61 @@ type OwnStatePayload = {
   sessionId?: string;
 };
 
-export default function App() {
+function getInitialAppState(): {
+  profile: OnboardingData;
+  authenticated: boolean;
+  checkingAuth: boolean;
+} {
+  const savedProfile = loadOnboarding();
+
+  if (hasAuthRedirectParams()) {
+    return { profile: savedProfile, authenticated: false, checkingAuth: true };
+  }
+
+  const onboardingProfile: OnboardingData = {
+    ...savedProfile,
+    step: 'welcome',
+    authenticated: false,
+    authProvider: null,
+  };
+  saveOnboarding(onboardingProfile);
+  return { profile: onboardingProfile, authenticated: false, checkingAuth: false };
+}
+
+function DashboardApp({
+  profile,
+  onSignOut,
+}: {
+  profile: OnboardingData;
+  onSignOut: () => void;
+}) {
   const [activeView, setActiveView] = useState<ViewId>('network');
   const [telemetryOpen, setTelemetryOpen] = useState(true);
   const [feed, setFeed] = useState<TelemetryEvent[]>([]);
   const feedRef = useRef<HTMLDivElement>(null);
 
-  // Session state
   const [orbStatus, setOrbStatus] = useState<OrbStatus>('offline');
-  const [secondsLeft, setSecondsLeft] = useState(0);
+  const [secondsLeft, setSecondsLeft] = useState(profile.sessionLength * 60);
   const [liftCount, setLiftCount] = useState(0);
   const [totalPauseMs, setTotalPauseMs] = useState(0);
   const [currentWorkflow, setCurrentWorkflow] = useState('');
 
-  // Groups / squads
   const [groups, setGroups] = useState<string[]>([]);
   const [activeGroup, setActiveGroup] = useState<string | null>(null);
 
-  // Hardware settings
-  const [strictness, setStrictness] = useState('standard');
+  const [strictness, setStrictness] = useState<string>(profile.accountability);
   const [brightness, setBrightness] = useState(72);
   const [breathSpeed, setBreathSpeed] = useState(45);
-  const [taskColor, setTaskColor] = useState('amber');
+  const [taskColor, setTaskColor] = useState(profile.avatar.background);
 
   const sessionActive = orbStatus !== 'offline';
 
-  // Timer — only ticks when phone is docked
   useEffect(() => {
     if (orbStatus !== 'docked') return;
     const id = setInterval(() => setSecondsLeft((s) => Math.max(0, s - 1)), 1000);
     return () => clearInterval(id);
   }, [orbStatus]);
 
-  // Scroll telemetry feed to bottom
   useEffect(() => {
     if (feedRef.current) feedRef.current.scrollTop = feedRef.current.scrollHeight;
   }, [feed]);
@@ -73,17 +102,15 @@ export default function App() {
     setFeed((f) => [...f.slice(-49), evt]);
   }
 
-  // Wire up IPC — runs once on mount
   useEffect(() => {
     if (!window.api) return;
 
     window.api.onOwnState((raw) => {
       const data = raw as OwnStatePayload;
-      pushTelemetry(`focus-orb/own/state`, data);
+      pushTelemetry('focus-orb/own/state', data);
 
       if (data.status === 'docked') {
         if (data.duration != null) {
-          // Initial dock → new session
           setSecondsLeft(data.duration * 60);
           setCurrentWorkflow(data.workflowGroup ?? '');
           setLiftCount(0);
@@ -102,7 +129,7 @@ export default function App() {
 
   function handleSessionEnd() {
     setOrbStatus('offline');
-    setSecondsLeft(0);
+    setSecondsLeft(profile.sessionLength * 60);
     setLiftCount(0);
     setTotalPauseMs(0);
     setCurrentWorkflow('');
@@ -125,12 +152,13 @@ export default function App() {
       <HwSimulator
         activeGroup={activeGroup}
         groups={groups}
+        initialDuration={profile.sessionLength}
         onAddGroup={handleAddGroup}
         onSelectGroup={setActiveGroup}
         onSessionEnd={handleSessionEnd}
       />
 
-      <Sidebar activeView={activeView} onSelect={setActiveView} />
+      <Sidebar activeView={activeView} onSelect={setActiveView} profile={profile} />
 
       <main
         className="min-h-screen flex-1 transition-[margin] duration-300"
@@ -144,6 +172,7 @@ export default function App() {
           sessionActive={sessionActive}
           telemetryOpen={telemetryOpen}
           onToggleTelemetry={() => setTelemetryOpen((t) => !t)}
+          onSignOut={onSignOut}
         />
 
         <div className="px-10 pb-16">
@@ -190,4 +219,75 @@ export default function App() {
       </AnimatePresence>
     </div>
   );
+}
+
+export default function App() {
+  const [initialState] = useState(getInitialAppState);
+  const [profile, setProfile] = useState(initialState.profile);
+  const [authenticated, setAuthenticated] = useState(initialState.authenticated);
+  const [checkingAuth, setCheckingAuth] = useState(initialState.checkingAuth);
+
+  useEffect(() => {
+    setProfile(loadOnboarding());
+  }, [authenticated]);
+
+  useEffect(() => {
+    if (!checkingAuth) return;
+
+    let cancelled = false;
+    completeAuthRedirect()
+      .then((session) => {
+        if (cancelled || !session) return;
+        const nextProfile = mergeSessionIntoOnboarding(loadOnboarding(), session);
+        saveOnboarding(nextProfile);
+        setProfile(nextProfile);
+        setAuthenticated(true);
+      })
+      .finally(() => {
+        if (!cancelled) setCheckingAuth(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [checkingAuth]);
+
+  if (checkingAuth) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-bg-deeper text-ink">
+        <div className="text-center">
+          <div className="font-mono text-[10px] uppercase tracking-[0.22em] text-amber">
+            finishing sign in
+          </div>
+          <div className="mt-3 font-serif text-3xl italic">Opening Cohort...</div>
+        </div>
+      </div>
+    );
+  }
+
+  if (!authenticated) {
+    return (
+      <OnboardingPage
+        onAuthenticated={() => {
+          setProfile(loadOnboarding());
+          setAuthenticated(true);
+        }}
+      />
+    );
+  }
+
+  const handleSignOut = async () => {
+    await signOut();
+    const nextProfile: OnboardingData = {
+      ...loadOnboarding(),
+      step: 'welcome',
+      authenticated: false,
+      authProvider: null,
+    };
+    saveOnboarding(nextProfile);
+    setProfile(nextProfile);
+    setAuthenticated(false);
+  };
+
+  return <DashboardApp profile={profile} onSignOut={handleSignOut} />;
 }

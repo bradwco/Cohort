@@ -13,15 +13,23 @@ type OrbStatus = 'offline' | 'docked' | 'undocked';
 type Props = {
   activeGroup: string | null;
   groups: string[];
+  initialDuration?: number;
   onAddGroup: (name: string) => void;
   onSelectGroup: (name: string) => void;
   onSessionEnd: () => void;
 };
 
-export function HwSimulator({ activeGroup, groups, onAddGroup, onSelectGroup, onSessionEnd }: Props) {
+export function HwSimulator({
+  activeGroup,
+  groups,
+  initialDuration = 60,
+  onAddGroup,
+  onSelectGroup,
+  onSessionEnd,
+}: Props) {
   const [open, setOpen] = useState(false);
   const [userId, setUserId] = useState(USERS[0]!.id);
-  const [duration, setDuration] = useState(60);
+  const [duration, setDuration] = useState(initialDuration);
   const [status, setStatus] = useState<OrbStatus>('offline');
   const [log, setLog] = useState<string[]>([]);
   const [newGroupInput, setNewGroupInput] = useState('');
