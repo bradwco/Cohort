@@ -1,6 +1,4 @@
-import { ipcMain, shell } from 'electron';
-import { CH } from './channels';
-import { BrowserWindow, ipcMain } from 'electron';
+import { BrowserWindow, ipcMain, shell } from 'electron';
 import { CH, PUSH } from './channels';
 import {
   getProfile,
