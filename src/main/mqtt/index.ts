@@ -108,20 +108,20 @@ async function handleOwnOrbState(payload: Record<string, unknown>): Promise<void
 
   if (status === 'docked') {
     const duration = (payload.duration as number) ?? 60;
+    const workflowGroup = (payload.workflowGroup as string | undefined) ?? 'Focus Session';
 
     // Start a new session if none active
     if (!activeSessionId && currentUserId) {
-      const session = await startSession(currentUserId, 'Focus Session', duration);
+      const session = await startSession(currentUserId, workflowGroup, duration);
       if (session) activeSessionId = session.id;
     }
 
     await updateProfile(currentUserId!, { hardware_status: 'docked' });
     pauseStart = null;
-    broadcastToRenderer('mqtt:own-state', { status: 'docked', sessionId: activeSessionId });
+    broadcastToRenderer('mqtt:own-state', { status: 'docked', sessionId: activeSessionId, duration, workflowGroup });
   }
 
   if (status === 'undocked') {
-    // Start pause budget timer
     pauseStart = Date.now();
 
     if (activeSessionId && currentUserId) {
@@ -136,7 +136,7 @@ async function handleOwnOrbState(payload: Record<string, unknown>): Promise<void
     totalPauseMs += Date.now() - pauseStart;
     pauseStart = null;
     await updateProfile(currentUserId!, { hardware_status: 'docked' });
-    broadcastToRenderer('mqtt:own-state', { status: 'docked', totalPauseMs });
+    broadcastToRenderer('mqtt:own-state', { status: 'docked', totalPauseMs, sessionId: activeSessionId });
   }
 }
 

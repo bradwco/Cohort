@@ -13,14 +13,47 @@ type Props = {
   secondsLeft: number;
   fmt: (s: number) => string;
   taskColor: string;
+  orbStatus: 'offline' | 'docked' | 'undocked';
+  liftCount: number;
+  totalPauseMs: number;
+  currentWorkflow: string;
+  groups: string[];
+  activeGroup: string | null;
+  onSelectGroup: (name: string) => void;
+  onAddGroup: (name: string) => void;
 };
 
-export function NetworkView({ secondsLeft, fmt, taskColor }: Props) {
+export function NetworkView({
+  secondsLeft,
+  fmt,
+  taskColor,
+  orbStatus,
+  liftCount,
+  totalPauseMs,
+  currentWorkflow,
+  groups,
+  activeGroup,
+  onSelectGroup,
+  onAddGroup,
+}: Props) {
   const orbColor = COLOR_MAP[taskColor] ?? '#E8A87C';
   return (
     <div>
-      <HeroStage secondsLeft={secondsLeft} fmt={fmt} orbColor={orbColor} />
-      <SquadsBar />
+      <HeroStage
+        secondsLeft={secondsLeft}
+        fmt={fmt}
+        orbColor={orbColor}
+        orbStatus={orbStatus}
+        liftCount={liftCount}
+        totalPauseMs={totalPauseMs}
+        currentWorkflow={currentWorkflow}
+      />
+      <SquadsBar
+        groups={groups}
+        activeGroup={activeGroup}
+        onSelect={onSelectGroup}
+        onAdd={onAddGroup}
+      />
       <DeskMap fmt={fmt} />
     </div>
   );
