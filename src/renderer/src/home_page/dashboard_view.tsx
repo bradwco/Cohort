@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { PixelOrb } from '../orb_character/pixel_orb';
 import { PixelOrbMini } from '../orb_character/pixel_orb_mini';
 import { SparkIcon } from '../shared_ui/icons';
@@ -18,6 +18,7 @@ type ProfileRow = {
 type LiveState = {
   status: 'docked' | 'undocked' | 'offline';
   workflowGroup?: string;
+  sessionStartedAt?: string;
   pickupCount: number;
 };
 
@@ -59,6 +60,15 @@ function computeFlowScore(liftCount: number, totalPauseMs: number, sessionLength
   return Math.max(0, Math.round(100 - pausePenalty - liftPenalty));
 }
 
+function formatElapsed(startedAt?: string): string {
+  if (!startedAt) return 'live now';
+  const elapsedSeconds = Math.max(0, Math.floor((Date.now() - Date.parse(startedAt)) / 1000));
+  const hours = Math.floor(elapsedSeconds / 3600);
+  const minutes = Math.floor((elapsedSeconds % 3600) / 60);
+  if (hours > 0) return `${hours}h ${minutes}m`;
+  return `${minutes}m`;
+}
+
 type Props = {
   userId: string | null;
   profile: OnboardingData;
@@ -88,12 +98,7 @@ export function DashboardView({
   const [sessions, setSessions] = useState<DBSession[]>([]);
   const [friends, setFriends] = useState<ProfileRow[]>([]);
   const [liveStates, setLiveStates] = useState<Map<string, LiveState>>(new Map());
-
-  const [qsOpen, setQsOpen] = useState(false);
-  const [qsWorkflow, setQsWorkflow] = useState('');
-  const [qsDuration, setQsDuration] = useState(Math.min(240, Math.max(5, profile.sessionLength)));
-  const [qsStatus, setQsStatus] = useState<'idle' | 'starting' | 'done'>('idle');
-  const qsInputRef = useRef<HTMLInputElement>(null);
+  const [, setNowTick] = useState(Date.now());
 
   const streak = computeStreak(sessions);
   const insight = GEMMA_INSIGHTS[sessions.length % GEMMA_INSIGHTS.length] ?? GEMMA_INSIGHTS[0];
@@ -107,15 +112,26 @@ export function DashboardView({
   }, [userId]);
 
   useEffect(() => {
+    const id = window.setInterval(() => setNowTick(Date.now()), 30000);
+    return () => window.clearInterval(id);
+  }, []);
+
+  useEffect(() => {
+    if (!window.api || friends.length === 0) return;
+    void window.api.subscribeFriends(friends.map((friend) => friend.id));
+  }, [friends]);
+
+  useEffect(() => {
     if (!window.api) return;
     const cleanup = window.api.onFriendState((raw) => {
-      const data = raw as { userId: string; status: string; workflowGroup?: string };
+      const data = raw as { userId: string; status: string; workflowGroup?: string; sessionStartedAt?: string };
       setLiveStates((prev) => {
         const next = new Map(prev);
         const existing = next.get(data.userId) ?? { status: 'offline', pickupCount: 0 };
         next.set(data.userId, {
           status: data.status as LiveState['status'],
           workflowGroup: data.workflowGroup ?? existing.workflowGroup,
+          sessionStartedAt: data.sessionStartedAt ?? existing.sessionStartedAt,
           pickupCount: existing.pickupCount,
         });
         return next;
@@ -123,27 +139,6 @@ export function DashboardView({
     });
     return () => { cleanup(); };
   }, []);
-
-  useEffect(() => {
-    if (qsOpen && qsInputRef.current) qsInputRef.current.focus();
-  }, [qsOpen]);
-
-  async function handleQuickStart() {
-    if (!userId || !qsWorkflow.trim()) return;
-    const duration = Math.min(240, Math.max(5, Math.round(qsDuration)));
-    setQsStatus('starting');
-    try {
-      await window.api.startSession(userId, qsWorkflow.trim(), duration);
-      setQsStatus('done');
-      setTimeout(() => {
-        setQsOpen(false);
-        setQsStatus('idle');
-        setQsWorkflow('');
-      }, 1200);
-    } catch {
-      setQsStatus('idle');
-    }
-  }
 
   const activeFriends = friends.filter((f) => {
     const live = liveStates.get(f.id);
@@ -200,67 +195,6 @@ export function DashboardView({
             </div>
           )}
 
-          {!sessionActive && (
-            <div className="mt-8 w-full max-w-xl">
-              {!qsOpen ? (
-                <button
-                  type="button"
-                  onClick={() => setQsOpen(true)}
-                  className="rounded border border-amber/35 bg-amber/[0.08] px-4 py-2 font-mono text-[11px] uppercase tracking-[0.12em] text-amber transition-all hover:-translate-y-0.5 hover:bg-amber/[0.12]"
-                >
-                  quick start session
-                </button>
-              ) : (
-                <div className="rounded-md border border-line bg-bg-deeper/60 p-4">
-                  <input
-                    ref={qsInputRef}
-                    value={qsWorkflow}
-                    onChange={(e) => setQsWorkflow(e.target.value)}
-                    onKeyDown={(e) => { if (e.key === 'Enter') void handleQuickStart(); }}
-                    placeholder="what are you working on?"
-                    className="h-10 w-full rounded border border-line-mid bg-bg-deeper/60 px-3 font-serif text-sm italic text-ink outline-none transition-colors placeholder:text-ink-faint focus:border-amber/45"
-                  />
-                  <div className="mt-3 grid grid-cols-[1fr_130px] items-end gap-3 text-left">
-                    <div className="font-mono text-[10px] uppercase tracking-[0.14em] text-ink-faint">
-                      session length
-                    </div>
-                    <label className="block">
-                      <input
-                        type="number"
-                        min={5}
-                        max={240}
-                        value={qsDuration}
-                        onChange={(event) => {
-                          const next = Number(event.target.value);
-                          if (Number.isNaN(next)) return;
-                          setQsDuration(next);
-                        }}
-                        onBlur={() => setQsDuration((v) => Math.min(240, Math.max(5, Math.round(v))))}
-                        className="no-number-spinner h-10 w-full rounded border border-line-mid bg-bg-deeper/60 px-3 text-right font-serif text-xl italic text-ink outline-none transition-colors focus:border-amber/45"
-                      />
-                    </label>
-                  </div>
-                  <div className="mt-3 flex gap-2">
-                    <button
-                      type="button"
-                      onClick={() => void handleQuickStart()}
-                      disabled={!qsWorkflow.trim() || qsStatus === 'starting'}
-                      className="flex-1 rounded border border-amber/35 bg-amber/[0.08] py-2 font-mono text-[10px] uppercase tracking-[0.12em] text-amber transition-all hover:bg-amber/[0.12] disabled:opacity-40"
-                    >
-                      {qsStatus === 'starting' ? 'starting...' : qsStatus === 'done' ? 'started' : `start ${Math.min(240, Math.max(5, Math.round(qsDuration)))}m session`}
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => { setQsOpen(false); setQsWorkflow(''); setQsStatus('idle'); }}
-                      className="rounded border border-line px-3 py-2 font-mono text-[10px] text-ink-faint hover:border-line-mid"
-                    >
-                      cancel
-                    </button>
-                  </div>
-                </div>
-              )}
-            </div>
-          )}
         </div>
       </div>
 
@@ -302,6 +236,9 @@ export function DashboardView({
                         <div className="truncate font-serif text-sm italic">{f.username}</div>
                         <div className="truncate font-mono text-[9px] text-ink-faint">
                           {live?.workflowGroup ?? f.current_activity}
+                        </div>
+                        <div className="font-mono text-[9px] text-amber">
+                          {formatElapsed(live?.sessionStartedAt)}
                         </div>
                       </div>
                     </div>

@@ -16,6 +16,8 @@ type ProfileRow = {
   orb_color: string;
 };
 
+const NOTE_LIMIT = 80;
+
 type Props = {
   userId: string | null;
   activeGroup: string | null;
@@ -45,6 +47,7 @@ export function HwSimulator({
   const [sessionStartedAt, setSessionStartedAt] = useState<string | null>(null);
   const [sessionDuration, setSessionDuration] = useState(initialDuration);
   const [sessionWorkflow, setSessionWorkflow] = useState<string>('Focus Session');
+  const [sessionNote, setSessionNote] = useState('');
 
   useEffect(() => {
     if (!window.api || !currentUserId) return;
@@ -96,6 +99,7 @@ export function HwSimulator({
       setSessionStartedAt(null);
       setSessionDuration(initialDuration);
       setSessionWorkflow(activeGroup ?? 'Focus Session');
+      setSessionNote('');
     }
   }, [activeGroup, initialDuration, userId, users]);
 
@@ -119,8 +123,11 @@ export function HwSimulator({
   }
 
   async function dock() {
+    const trimmedNote = sessionNote.trim();
+    if (!trimmedNote) return;
+
     const nextStartedAt = sessionStartedAt ?? new Date().toISOString();
-    const nextWorkflow = activeGroup ?? sessionWorkflow ?? 'Focus Session';
+    const nextWorkflow = trimmedNote;
     const payload = {
       status: 'docked',
       duration,
@@ -180,6 +187,7 @@ export function HwSimulator({
       setSessionStartedAt(null);
       setSessionDuration(duration);
       setSessionWorkflow(activeGroup ?? 'Focus Session');
+      setSessionNote('');
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
       push(`ERR ${msg.slice(0, 80)}`);
@@ -241,6 +249,7 @@ export function HwSimulator({
                     setSessionStartedAt(null);
                     setSessionDuration(duration);
                     setSessionWorkflow(activeGroup ?? 'Focus Session');
+                    setSessionNote('');
                   }}
                   className={cn(
                     'rounded border px-2 py-1 text-[9px] transition-colors',
@@ -299,6 +308,23 @@ export function HwSimulator({
           </div>
 
           <div className="mb-3">
+            <div className="mb-1 flex items-center justify-between text-[9px] text-ink-faint">
+              <span>note / what you are doing</span>
+              <span>{sessionNote.length}/{NOTE_LIMIT}</span>
+            </div>
+            <textarea
+              value={sessionNote}
+              maxLength={NOTE_LIMIT}
+              onChange={(e) => {
+                setSessionNote(e.target.value);
+                if (status === 'offline') setSessionWorkflow(e.target.value.trim() || 'Focus Session');
+              }}
+              placeholder="e.g. finish econ problem set"
+              className="h-16 w-full resize-none rounded border border-line-mid bg-white/[0.04] px-2 py-1.5 text-[9px] leading-4 text-ink placeholder-ink-faint outline-none focus:border-amber/40"
+            />
+          </div>
+
+          <div className="mb-3">
             <div className="mb-1 text-[9px] text-ink-faint">session duration (min)</div>
             <div className="flex gap-1.5">
               {[30, 45, 60, 90].map((d) => (
@@ -330,12 +356,12 @@ export function HwSimulator({
                 status === 'offline' && 'bg-line-mid',
               )}
             />
-            <span className="text-[10px] text-ink">{user?.label ?? 'No profile loaded'} · {status}</span>
+            <span className="text-[10px] text-ink">{user?.label ?? 'No profile loaded'} / {status}</span>
           </div>
 
           <div className="mb-2 grid grid-cols-2 gap-1.5">
             <button
-              disabled={status === 'docked' || !userId}
+              disabled={status === 'docked' || !userId || !sessionNote.trim()}
               onClick={dock}
               className="rounded border border-amber/40 bg-amber/10 px-2 py-1.5 text-[10px] text-amber transition-opacity disabled:opacity-30"
             >

@@ -40,6 +40,15 @@ function getFriendTask(p: ProfileRow, live?: LiveState, status?: string): string
   return 'offline';
 }
 
+function formatElapsed(startedAt?: string): string {
+  if (!startedAt) return 'live now';
+  const elapsedSeconds = Math.max(0, Math.floor((Date.now() - Date.parse(startedAt)) / 1000));
+  const hours = Math.floor(elapsedSeconds / 3600);
+  const minutes = Math.floor((elapsedSeconds % 3600) / 60);
+  if (hours > 0) return `${hours}h ${minutes}m`;
+  return `${minutes}m`;
+}
+
 type Props = {
   userId: string | null;
 };
@@ -292,6 +301,11 @@ export function FriendsView({ userId }: Props) {
                     <div className="min-w-0 flex-1">
                       <div className="font-serif text-sm italic">@{p.username}</div>
                       <div className="font-mono text-[9px] text-ink-faint">{task}</div>
+                      {status !== 'offline' && (
+                        <div className="font-mono text-[9px] text-amber">
+                          {formatElapsed(live?.sessionStartedAt)}
+                        </div>
+                      )}
                       {nudged && (
                         <div className="font-mono text-[9px] text-amber">nudged you just now</div>
                       )}
@@ -379,7 +393,10 @@ export function FriendsView({ userId }: Props) {
                   <div key={p.id} className="flex items-center gap-2 py-2">
                     <span className="h-1.5 w-1.5 animate-pulse-fast rounded-full bg-amber shadow-[0_0_6px_#E8A87C]" />
                     <span className="font-serif text-sm italic">{p.username}</span>
-                    <span className="ml-auto font-mono text-[9px] text-ink-faint">{live?.workflowGroup ?? '--'}</span>
+                    <span className="ml-auto text-right font-mono text-[9px] text-ink-faint">
+                      <span className="block text-ink-dim">{live?.workflowGroup ?? p.current_activity ?? 'in session'}</span>
+                      <span className="block text-amber">{formatElapsed(live?.sessionStartedAt)}</span>
+                    </span>
                   </div>
                 );
               })

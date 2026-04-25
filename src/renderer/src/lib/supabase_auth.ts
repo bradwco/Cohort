@@ -287,20 +287,10 @@ export async function startGoogleAuth(data: OnboardingData): Promise<AuthSession
   if (error) throw new Error(error.message);
   if (!oauth.url) throw new Error('Supabase did not return a Google auth URL.');
 
-  // Open Google auth in the system browser (Chrome), then await the cohort:// deep link
-  await window.api.openExternal(oauth.url);
-  return new Promise<AuthSession>((resolve, reject) => {
-    const cleanup = window.api.onDeepLink(async (url: string) => {
-      cleanup();
-      try {
-        const session = await completeDeepLinkAuth(url);
-        if (!session) reject(new Error('Google authentication failed.'));
-        else resolve(session);
-      } catch (err) {
-        reject(err);
-      }
-    });
-  });
+  const callbackUrl = await window.api.openAuthWindow(oauth.url);
+  const session = await completeDeepLinkAuth(callbackUrl);
+  if (!session) throw new Error('Google authentication failed.');
+  return session;
 }
 
 export async function signUpWithEmailPassword(

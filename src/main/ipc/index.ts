@@ -1,4 +1,4 @@
-import { BrowserWindow, ipcMain, shell, screen, desktopCapturer } from 'electron';
+import { BrowserWindow, desktopCapturer, ipcMain, screen, shell } from 'electron';
 import * as fs from 'fs';
 import * as nodePath from 'path';
 import * as os from 'os';
@@ -99,22 +99,23 @@ export function registerIpcHandlers(): void {
     fs.writeFileSync(filePath, JSON.stringify({ userId, email, savedAt: new Date().toISOString() }));
   });
 
-  // --- Open URL in system browser ---
+  // Shell/auth windows
   ipcMain.handle(CH.OPEN_EXTERNAL, (_e, url: string) => shell.openExternal(url));
+  ipcMain.handle(CH.OPEN_AUTH_WINDOW, (event, url: string) => openAuthWindow(url, BrowserWindow.fromWebContents(event.sender)));
 
-  // ── Overlay window IPC ─────────────────────────────────────────────────
+  // Overlay window IPC
   ipcMain.on('set-ignore-mouse-events', (event, ignore: boolean) => {
     BrowserWindow.fromWebContents(event.sender)?.setIgnoreMouseEvents(ignore, { forward: true });
   });
 
   ipcMain.handle('get-config', () => ({
-    GEMINI_API_KEY:    (import.meta.env.GEMINI_API_KEY    as string) ?? '',
-    LOCAL_VLM_URL:     (import.meta.env.LOCAL_VLM_URL     as string) ?? 'http://127.0.0.1:11434/api/chat',
-    LOCAL_VLM_MODEL:   (import.meta.env.LOCAL_VLM_MODEL   as string) ?? 'moondream',
-    SUPABASE_URL:      (import.meta.env.SUPABASE_URL      as string) ?? '',
+    GEMINI_API_KEY: (import.meta.env.GEMINI_API_KEY as string) ?? '',
+    LOCAL_VLM_URL: (import.meta.env.LOCAL_VLM_URL as string) ?? 'http://127.0.0.1:11434/api/chat',
+    LOCAL_VLM_MODEL: (import.meta.env.LOCAL_VLM_MODEL as string) ?? 'moondream',
+    SUPABASE_URL: (import.meta.env.SUPABASE_URL as string) ?? '',
     SUPABASE_ANON_KEY: (import.meta.env.SUPABASE_ANON_KEY as string) ?? '',
-    USER_ID:           getOverlayUserId(),
-    SESSION_ID:        getActiveSessionId() ?? '',
+    USER_ID: getOverlayUserId(),
+    SESSION_ID: getActiveSessionId() ?? '',
   }));
 
   ipcMain.handle('create-session', async (_e, { plannedDurationMinutes, workflowGroup }: { plannedDurationMinutes: number; workflowGroup: string }) => {
@@ -125,13 +126,16 @@ export function registerIpcHandlers(): void {
     return session?.id ?? null;
   });
 
-  ipcMain.handle('end-session', async (_e, { sessionId, flowScore, conversationHistory }: { sessionId: string; flowScore: number | null; conversationHistory: unknown[] }) => {
-    if (!sessionId) return;
-    const userId = getOverlayUserId();
-    await endSession(sessionId, 0, flowScore ?? 0, '', conversationHistory);
-    if (userId) await updateProfile(userId, { hardware_status: 'offline' });
-    setActiveSessionId(null);
-  });
+  ipcMain.handle(
+    'end-session',
+    async (_e, { sessionId, flowScore, conversationHistory }: { sessionId: string; flowScore: number | null; conversationHistory: unknown[] }) => {
+      if (!sessionId) return;
+      const userId = getOverlayUserId();
+      await endSession(sessionId, 0, flowScore ?? 0, '', conversationHistory);
+      if (userId) await updateProfile(userId, { hardware_status: 'offline' });
+      setActiveSessionId(null);
+    },
+  );
 
   ipcMain.handle('take-screenshot', async () => {
     const { width, height } = screen.getPrimaryDisplay().workAreaSize;
@@ -155,7 +159,7 @@ export function registerIpcHandlers(): void {
       'distracted = entertainment, shopping, social feeds, games, memes, unrelated browsing',
     ].join('\n');
     const ep = endpoint ?? process.env['LOCAL_VLM_URL'] ?? 'http://127.0.0.1:11434/api/chat';
-    const m  = model    ?? process.env['LOCAL_VLM_MODEL'] ?? 'moondream';
+    const m = model ?? process.env['LOCAL_VLM_MODEL'] ?? 'moondream';
     const resp = await fetch(ep, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -179,4 +183,69 @@ function getOverlayUserId(): string {
   } catch {
     return '';
   }
+}
+
+function openAuthWindow(url: string, parent: BrowserWindow | null): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const authWin = new BrowserWindow({
+      width: 520,
+      height: 720,
+      parent: parent ?? undefined,
+      modal: Boolean(parent),
+      show: false,
+      autoHideMenuBar: true,
+      backgroundColor: '#08090f',
+      titleBarStyle: 'hidden',
+      webPreferences: {
+        nodeIntegration: false,
+        contextIsolation: true,
+        sandbox: true,
+      },
+    });
+
+    let settled = false;
+
+    const finish = (callbackUrl: string) => {
+      if (settled) return;
+      settled = true;
+      resolve(callbackUrl);
+      if (!authWin.isDestroyed()) authWin.close();
+    };
+
+    const fail = () => {
+      if (settled) return;
+      settled = true;
+      reject(new Error('Google sign in was closed before it finished.'));
+    };
+
+    const maybeFinish = (nextUrl: string) => {
+      if (!nextUrl.startsWith('cohort://')) return false;
+      finish(nextUrl);
+      return true;
+    };
+
+    authWin.once('ready-to-show', () => authWin.show());
+    authWin.once('closed', fail);
+
+    authWin.webContents.on('will-navigate', (navEvent, nextUrl) => {
+      if (maybeFinish(nextUrl)) navEvent.preventDefault();
+    });
+
+    authWin.webContents.on('will-redirect', (navEvent, nextUrl) => {
+      if (maybeFinish(nextUrl)) navEvent.preventDefault();
+    });
+
+    authWin.webContents.setWindowOpenHandler(({ url: nextUrl }) => {
+      if (maybeFinish(nextUrl)) return { action: 'deny' };
+      return { action: 'allow' };
+    });
+
+    authWin.loadURL(url).catch((err) => {
+      if (!settled) {
+        settled = true;
+        reject(err);
+      }
+      if (!authWin.isDestroyed()) authWin.close();
+    });
+  });
 }
