@@ -107,6 +107,11 @@ export async function persistSignedInUserProfile(profile: OnboardingData, sessio
     console.error('[auth] update user metadata:', authError.message);
   }
 
+  // Write to shared file so overlay_standalone can read the userId without auth
+  if ((window as any).api?.saveUserSession) {
+    (window as any).api.saveUserSession(session.userId, session.email ?? '').catch(() => {});
+  }
+
   const profileRow: ProfileRow = {
     id: session.userId,
     username: profile.username || profile.displayName || session.email || 'cohort',
