@@ -2,7 +2,6 @@ import { useState } from 'react';
 import { motion } from 'motion/react';
 import { cn } from './cn';
 
-// Seed users matching the Supabase sample data
 const USERS = [
   { id: '11111111-1111-1111-1111-111111111111', label: 'Kyle (You)', color: '#E8A87C' },
   { id: '22222222-2222-2222-2222-222222222222', label: 'Alex', color: '#6B8E23' },
@@ -11,12 +10,21 @@ const USERS = [
 
 type OrbStatus = 'offline' | 'docked' | 'undocked';
 
-export function HwSimulator() {
+type Props = {
+  activeGroup: string | null;
+  groups: string[];
+  onAddGroup: (name: string) => void;
+  onSelectGroup: (name: string) => void;
+  onSessionEnd: () => void;
+};
+
+export function HwSimulator({ activeGroup, groups, onAddGroup, onSelectGroup, onSessionEnd }: Props) {
   const [open, setOpen] = useState(false);
   const [userId, setUserId] = useState(USERS[0]!.id);
   const [duration, setDuration] = useState(60);
   const [status, setStatus] = useState<OrbStatus>('offline');
   const [log, setLog] = useState<string[]>([]);
+  const [newGroupInput, setNewGroupInput] = useState('');
 
   function push(msg: string) {
     setLog((l) => [`${new Date().toLocaleTimeString()} ${msg}`, ...l.slice(0, 6)]);
@@ -36,7 +44,8 @@ export function HwSimulator() {
   }
 
   async function dock() {
-    if (await fire({ status: 'docked', duration })) setStatus('docked');
+    if (await fire({ status: 'docked', duration, workflowGroup: activeGroup ?? 'Focus Session' }))
+      setStatus('docked');
   }
 
   async function undock() {
@@ -54,11 +63,20 @@ export function HwSimulator() {
       await window.api.endSession(pauseMin, 85, 'Simulated session — great work!');
       push('✓ session ended');
       setStatus('offline');
+      onSessionEnd();
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
       push(`✗ ${msg.slice(0, 80)}`);
       console.error('[hw-sim]', err);
     }
+  }
+
+  function submitNewGroup(e: React.FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    const trimmed = newGroupInput.trim();
+    if (!trimmed) return;
+    onAddGroup(trimmed);
+    setNewGroupInput('');
   }
 
   const user = USERS.find((u) => u.id === userId)!;
@@ -84,7 +102,7 @@ export function HwSimulator() {
         <motion.div
           initial={{ opacity: 0, y: 8 }}
           animate={{ opacity: 1, y: 0 }}
-          className="absolute bottom-9 left-0 w-64 rounded border border-line bg-bg-deeper/95 p-4 backdrop-blur-xl"
+          className="absolute bottom-9 left-0 w-72 rounded border border-line bg-bg-deeper/95 p-4 backdrop-blur-xl"
         >
           <div className="mb-3 text-[9px] uppercase tracking-widest text-ink-faint">
             Hardware Simulator
@@ -110,6 +128,49 @@ export function HwSimulator() {
                 </button>
               ))}
             </div>
+          </div>
+
+          {/* Group selector */}
+          <div className="mb-3">
+            <div className="mb-1 text-[9px] text-ink-faint">group / squad</div>
+            {groups.length > 0 && (
+              <div className="mb-1.5 flex flex-wrap gap-1">
+                {groups.map((g) => (
+                  <button
+                    key={g}
+                    onClick={() => onSelectGroup(g)}
+                    className={cn(
+                      'rounded border px-2 py-1 text-[9px] transition-colors',
+                      activeGroup === g
+                        ? 'border-amber/60 bg-amber/10 text-amber'
+                        : 'border-line-mid text-ink-dim hover:text-ink',
+                    )}
+                  >
+                    {g}
+                  </button>
+                ))}
+              </div>
+            )}
+            <form onSubmit={submitNewGroup} className="flex gap-1">
+              <input
+                value={newGroupInput}
+                onChange={(e) => setNewGroupInput(e.target.value)}
+                placeholder="new group…"
+                className="min-w-0 flex-1 rounded border border-line-mid bg-white/[0.04] px-2 py-1 text-[9px] text-ink placeholder-ink-faint outline-none focus:border-amber/40"
+              />
+              <button
+                type="submit"
+                disabled={!newGroupInput.trim()}
+                className="rounded border border-line-mid px-2 py-1 text-[9px] text-ink-dim transition-colors hover:text-ink disabled:opacity-30"
+              >
+                +
+              </button>
+            </form>
+            {activeGroup && (
+              <div className="mt-1 truncate text-[8px] text-ink-faint">
+                docking as <span className="text-amber">{activeGroup}</span>
+              </div>
+            )}
           </div>
 
           {/* Duration */}
