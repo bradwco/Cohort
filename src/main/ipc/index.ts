@@ -1,6 +1,7 @@
 import { app, BrowserWindow, ipcMain, shell } from 'electron';
 import * as fs from 'fs';
 import * as nodePath from 'path';
+import * as os from 'os';
 import { CH, PUSH } from './channels';
 import {
   getProfile,
@@ -94,7 +95,7 @@ export function registerIpcHandlers(): void {
 
   // Save user session to shared file for overlay_standalone to read
   ipcMain.handle(CH.SAVE_USER_SESSION, (_e, userId: string, email: string) => {
-    const filePath = nodePath.join(app.getPath('userData'), 'cohort-user.json');
+    const filePath = nodePath.join(os.tmpdir(), 'cohort-user.json');
     fs.writeFileSync(filePath, JSON.stringify({ userId, email, savedAt: new Date().toISOString() }));
   });
 

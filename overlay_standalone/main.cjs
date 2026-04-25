@@ -1,6 +1,7 @@
 const { app, BrowserWindow, screen, ipcMain, desktopCapturer } = require('electron');
 const path = require('node:path');
 const fs   = require('node:fs');
+const os   = require('node:os');
 
 function loadEnv() {
   try {
@@ -22,7 +23,7 @@ const env = loadEnv();
 
 function getStoredUserId() {
   try {
-    const filePath = path.join(app.getPath('userData'), 'cohort-user.json');
+    const filePath = path.join(os.tmpdir(), 'cohort-user.json');
     const data = JSON.parse(fs.readFileSync(filePath, 'utf8'));
     console.log('[userId] read from file:', data.userId);
     return data.userId ?? null;
