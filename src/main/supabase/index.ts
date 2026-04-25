@@ -7,6 +7,7 @@ export interface Profile {
   hardware_status: 'docked' | 'offline';
   current_activity: string;
   last_ping: string;
+  avatar?: { skin: string; hair: string; eyes: string; outfit: string; accessory: string; background: string } | null;
 }
 
 export interface Session {
@@ -48,7 +49,7 @@ export async function getProfile(userId: string): Promise<Profile | null> {
 
 export async function updateProfile(
   userId: string,
-  updates: Partial<Pick<Profile, 'hardware_status' | 'current_activity' | 'orb_color' | 'last_ping'>>,
+  updates: Partial<Pick<Profile, 'hardware_status' | 'current_activity' | 'orb_color' | 'last_ping' | 'avatar'>>,
 ): Promise<void> {
   const { error } = await getSupabaseClient()
     .from('profiles')
