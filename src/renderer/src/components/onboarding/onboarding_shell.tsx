@@ -60,13 +60,8 @@ export function OnboardingShell({
             className="mb-10 flex items-center gap-3"
           >
             <PixelOrbMini color="#E8A87C" pulse />
-            <div>
-              <div className="font-serif text-[22px] font-normal italic tracking-[-0.02em]">
-                Cohort
-              </div>
-              <div className="mt-0.5 font-mono text-[9px] uppercase tracking-[0.18em] text-ink-faint">
-                first launch
-              </div>
+            <div className="font-serif text-[22px] font-normal italic tracking-[-0.02em]">
+              Cohort
             </div>
           </motion.div>
 
@@ -74,29 +69,11 @@ export function OnboardingShell({
             variants={shellStagger}
             initial="hidden"
             animate="show"
-            className="flex flex-1 flex-col justify-center gap-5"
+            className="flex flex-1 flex-col justify-center"
           >
             <motion.div variants={riseItem}>
-              <div className="font-mono text-[10px] uppercase tracking-[0.2em] text-amber">
-                setup in progress
-              </div>
-              <div className="mt-3 font-serif text-[34px] font-light italic leading-tight tracking-[-0.03em]">
-                Build a focus room that feels like yours.
-              </div>
-            </motion.div>
-            <motion.div
-              key={activeStep}
-              variants={riseItem}
-              className="rounded-lg border border-line bg-white/[0.02] p-4"
-            >
-              <div className="font-mono text-[10px] uppercase tracking-[0.16em] text-ink-faint">
-                current screen
-              </div>
-              <div className="mt-2 font-serif text-xl italic text-ink">
-                {ONBOARDING_STEPS[activeIndex]?.title}
-              </div>
-              <div className="mt-2 font-mono text-[10px] leading-relaxed text-ink-faint">
-                {ONBOARDING_STEPS[activeIndex]?.summary}
+              <div className="font-serif text-[28px] font-light italic leading-tight tracking-[-0.03em]">
+                Build your focus presence.
               </div>
             </motion.div>
           </motion.div>
@@ -133,7 +110,7 @@ export function OnboardingShell({
         >
           <motion.header
             variants={riseItem}
-            className="flex items-center justify-between border-b border-line px-10 py-5"
+            className="flex items-center border-b border-line px-10 py-5"
           >
             <motion.div
               key={activeStep}
@@ -143,15 +120,6 @@ export function OnboardingShell({
               className="font-mono text-[10px] uppercase tracking-[0.18em] text-ink-faint"
             >
               cohort / onboarding / {activeStep}
-            </motion.div>
-            <motion.div
-              whileHover={{ y: -1 }}
-              className="flex items-center gap-2 rounded border border-amber/20 bg-amber/[0.06] px-3 py-1.5 text-amber"
-            >
-              <span className="h-1.5 w-1.5 animate-pulse-fast rounded-full bg-amber" />
-              <span className="font-mono text-[10px] uppercase tracking-[0.14em]">
-                desktop setup
-              </span>
             </motion.div>
           </motion.header>
 

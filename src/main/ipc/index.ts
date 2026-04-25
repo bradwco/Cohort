@@ -1,3 +1,5 @@
+import { ipcMain, shell } from 'electron';
+import { CH } from './channels';
 import { BrowserWindow, ipcMain } from 'electron';
 import { CH, PUSH } from './channels';
 import {
@@ -89,4 +91,7 @@ export function registerIpcHandlers(): void {
   ipcMain.handle(CH.HW_SIMULATE, (_e, userId: string, payload: Record<string, unknown>) =>
     simulateHardwareEvent(userId, payload),
   );
+
+  // --- Open URL in system browser ---
+  ipcMain.handle(CH.OPEN_EXTERNAL, (_e, url: string) => shell.openExternal(url));
 }

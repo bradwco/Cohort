@@ -55,6 +55,11 @@ const api = {
     return () => ipcRenderer.off(PUSH.FRIEND_NUDGE, h);
   },
 
+  // Open URL in the system browser
+  openExternal: (url: string): Promise<void> =>
+    ipcRenderer.invoke(CH.OPEN_EXTERNAL, url),
+
+  // Hardware simulator (dev only)
   // Hardware simulator
   simulateHardware: (userId: string, payload: Record<string, unknown>) =>
     ipcRenderer.invoke(CH.HW_SIMULATE, userId, payload),
