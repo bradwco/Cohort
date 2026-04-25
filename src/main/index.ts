@@ -1,41 +1,13 @@
-import { app, BrowserWindow, ipcMain, shell } from 'electron';
-import { join } from 'node:path';
-
-function createWindow(): void {
-  const win = new BrowserWindow({
-    width: 1200,
-    height: 800,
-    show: false,
-    autoHideMenuBar: true,
-    webPreferences: {
-      preload: join(__dirname, '../preload/index.js'),
-      contextIsolation: true,
-      nodeIntegration: false,
-      sandbox: false,
-    },
-  });
-
-  win.on('ready-to-show', () => win.show());
-
-  win.webContents.setWindowOpenHandler(({ url }) => {
-    shell.openExternal(url);
-    return { action: 'deny' };
-  });
-
-  if (process.env['ELECTRON_RENDERER_URL']) {
-    win.loadURL(process.env['ELECTRON_RENDERER_URL']);
-  } else {
-    win.loadFile(join(__dirname, '../renderer/index.html'));
-  }
-}
+import { app, BrowserWindow, ipcMain } from 'electron';
+import { createMainWindow } from './windows/main_window';
 
 app.whenReady().then(() => {
   ipcMain.handle('app:ping', () => 'pong');
 
-  createWindow();
+  createMainWindow();
 
   app.on('activate', () => {
-    if (BrowserWindow.getAllWindows().length === 0) createWindow();
+    if (BrowserWindow.getAllWindows().length === 0) createMainWindow();
   });
 });
 
