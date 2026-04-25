@@ -46,8 +46,8 @@ const STEP_COPY: Record<OnboardingStepId, { headline: string; body: string; meta
   },
   auth: {
     headline: 'Save your setup.',
-    body: 'Create an account or use demo mode to enter the app with these onboarding choices.',
-    meta: ['google', 'email link', 'demo mode'],
+    body: 'Create an account with Google or an email link to enter the app with these choices.',
+    meta: ['google', 'email link'],
   },
 };
 
@@ -67,7 +67,7 @@ export function OnboardingPage({ onAuthenticated }: Props) {
     onboarding.previous();
   };
 
-  const complete = (provider: Parameters<typeof onboarding.completeAuth>[0] = 'demo') => {
+  const complete = (provider: Parameters<typeof onboarding.completeAuth>[0] = 'email') => {
     onboarding.completeAuth(provider);
     onAuthenticated();
   };

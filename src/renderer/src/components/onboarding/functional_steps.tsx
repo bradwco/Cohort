@@ -1,4 +1,4 @@
-import { AlertCircle, CheckCircle2, LogIn, Mail, Play, Radio, Shield, Timer, Users } from 'lucide-react';
+import { AlertCircle, CheckCircle2, LogIn, Mail, Radio, Shield, Timer, Users } from 'lucide-react';
 import { motion } from 'motion/react';
 import { useState } from 'react';
 import type { OnboardingData } from '../../state/onboarding';
@@ -6,7 +6,6 @@ import { Button } from '../../shared_ui/button';
 import { cn, hexA } from '../../shared_ui/cn';
 import {
   isSupabaseConfigured,
-  saveAuthSession,
   sendEmailMagicLink,
   startGoogleAuth,
 } from '../../lib/supabase_auth';
@@ -362,9 +361,11 @@ export function AuthStep({ data, update, onComplete }: StepProps) {
 
   const email = data.email;
 
-  const handleGoogle = () => {
+  const handleGoogle = async () => {
+    setStatus('sending');
+    setMessage('');
     try {
-      startGoogleAuth(data);
+      await startGoogleAuth(data);
     } catch (error) {
       setStatus('error');
       setMessage(error instanceof Error ? error.message : 'Unable to start Google auth.');
@@ -384,11 +385,6 @@ export function AuthStep({ data, update, onComplete }: StepProps) {
     }
   };
 
-  const handleDemo = () => {
-    saveAuthSession({ accessToken: 'demo', provider: 'demo' });
-    onComplete?.('demo');
-  };
-
   return (
     <div className="grid max-w-md gap-3">
       {!configured && (
@@ -398,8 +394,7 @@ export function AuthStep({ data, update, onComplete }: StepProps) {
             Supabase keys missing
           </div>
           <div className="mt-2 font-mono text-[10px] leading-relaxed text-ink-faint">
-            Google and email auth need VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY. Demo mode
-            still works locally.
+            Google and email auth need SUPABASE_URL and SUPABASE_ANON_KEY in your .env file.
           </div>
         </div>
       )}
@@ -407,20 +402,31 @@ export function AuthStep({ data, update, onComplete }: StepProps) {
       <button
         type="button"
         onClick={handleGoogle}
-        disabled={!configured}
+        disabled={!configured || status === 'sending'}
         className="flex h-12 items-center gap-3 rounded-md border border-line-mid bg-white/[0.025] px-4 font-mono text-[11px] uppercase tracking-[0.12em] text-ink-dim transition-all hover:-translate-y-0.5 hover:border-amber/35 hover:bg-amber/[0.06] hover:text-amber disabled:cursor-not-allowed disabled:opacity-40"
       >
         <LogIn className="h-4 w-4" />
-        Continue with Google
+        {status === 'sending' ? 'Opening Auth...' : 'Continue with Google'}
       </button>
 
-      <div className="rounded-md border border-line bg-white/[0.02] p-3">
-        <label className="block">
+      <form
+        className="rounded-md border border-line bg-white/[0.02] p-3"
+        autoComplete="on"
+        onSubmit={(event) => {
+          event.preventDefault();
+          void handleEmail();
+        }}
+      >
+        <label className="block" htmlFor="cohort-auth-email">
           <span className="mb-2 block font-mono text-[10px] uppercase tracking-[0.14em] text-ink-faint">
             email link
           </span>
           <input
+            id="cohort-auth-email"
             type="email"
+            name="username"
+            inputMode="email"
+            autoComplete="username"
             value={email}
             onChange={(event) => update({ email: event.target.value })}
             placeholder="you@example.com"
@@ -436,7 +442,7 @@ export function AuthStep({ data, update, onComplete }: StepProps) {
           <Mail className="h-4 w-4" />
           {status === 'sending' ? 'Sending...' : 'Send Email Link'}
         </button>
-      </div>
+      </form>
 
       {message && (
         <div
@@ -451,15 +457,6 @@ export function AuthStep({ data, update, onComplete }: StepProps) {
           {message}
         </div>
       )}
-
-      <button
-        type="button"
-        onClick={handleDemo}
-        className="flex h-12 items-center gap-3 rounded-md border border-line-mid bg-white/[0.025] px-4 font-mono text-[11px] uppercase tracking-[0.12em] text-ink-dim transition-all hover:-translate-y-0.5 hover:border-amber/35 hover:bg-amber/[0.06] hover:text-amber"
-      >
-        <Play className="h-4 w-4" />
-        Demo Mode
-      </button>
     </div>
   );
 }

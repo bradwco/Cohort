@@ -13,7 +13,12 @@ import { HwSimulator } from './shared_ui/hw_simulator';
 import type { TelemetryEvent, ViewId } from './shared_ui/types';
 import { loadOnboarding, saveOnboarding, type OnboardingData } from './state/onboarding';
 import { OnboardingPage } from './onboarding/page';
-import { getAuthRedirectSession, getSavedAuthSession } from './lib/supabase_auth';
+import {
+  completeAuthRedirect,
+  hasAuthRedirectParams,
+  mergeSessionIntoOnboarding,
+  signOut,
+} from './lib/supabase_auth';
 
 const fmt = (s: number) =>
   `${String(Math.floor(s / 60)).padStart(2, '0')}:${String(s % 60).padStart(2, '0')}`;
@@ -28,7 +33,34 @@ type OwnStatePayload = {
   sessionId?: string;
 };
 
-function DashboardApp({ profile }: { profile: OnboardingData }) {
+function getInitialAppState(): {
+  profile: OnboardingData;
+  authenticated: boolean;
+  checkingAuth: boolean;
+} {
+  const savedProfile = loadOnboarding();
+
+  if (hasAuthRedirectParams()) {
+    return { profile: savedProfile, authenticated: false, checkingAuth: true };
+  }
+
+  const onboardingProfile: OnboardingData = {
+    ...savedProfile,
+    step: 'welcome',
+    authenticated: false,
+    authProvider: null,
+  };
+  saveOnboarding(onboardingProfile);
+  return { profile: onboardingProfile, authenticated: false, checkingAuth: false };
+}
+
+function DashboardApp({
+  profile,
+  onSignOut,
+}: {
+  profile: OnboardingData;
+  onSignOut: () => void;
+}) {
   const [activeView, setActiveView] = useState<ViewId>('network');
   const [telemetryOpen, setTelemetryOpen] = useState(true);
   const [feed, setFeed] = useState<TelemetryEvent[]>([]);
@@ -140,6 +172,7 @@ function DashboardApp({ profile }: { profile: OnboardingData }) {
           sessionActive={sessionActive}
           telemetryOpen={telemetryOpen}
           onToggleTelemetry={() => setTelemetryOpen((t) => !t)}
+          onSignOut={onSignOut}
         />
 
         <div className="px-10 pb-16">
@@ -189,28 +222,48 @@ function DashboardApp({ profile }: { profile: OnboardingData }) {
 }
 
 export default function App() {
-  const [profile, setProfile] = useState(() => loadOnboarding());
-  const [authenticated, setAuthenticated] = useState(() => {
-    const redirectSession = getAuthRedirectSession();
-    const savedSession = getSavedAuthSession();
-    const savedProfile = loadOnboarding();
-
-    if (redirectSession && !savedProfile.authenticated) {
-      const nextProfile: OnboardingData = {
-        ...savedProfile,
-        authProvider: redirectSession.provider,
-        authenticated: true,
-      };
-      saveOnboarding(nextProfile);
-      return true;
-    }
-
-    return savedProfile.authenticated || Boolean(savedSession);
-  });
+  const [initialState] = useState(getInitialAppState);
+  const [profile, setProfile] = useState(initialState.profile);
+  const [authenticated, setAuthenticated] = useState(initialState.authenticated);
+  const [checkingAuth, setCheckingAuth] = useState(initialState.checkingAuth);
 
   useEffect(() => {
     setProfile(loadOnboarding());
   }, [authenticated]);
+
+  useEffect(() => {
+    if (!checkingAuth) return;
+
+    let cancelled = false;
+    completeAuthRedirect()
+      .then((session) => {
+        if (cancelled || !session) return;
+        const nextProfile = mergeSessionIntoOnboarding(loadOnboarding(), session);
+        saveOnboarding(nextProfile);
+        setProfile(nextProfile);
+        setAuthenticated(true);
+      })
+      .finally(() => {
+        if (!cancelled) setCheckingAuth(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [checkingAuth]);
+
+  if (checkingAuth) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-bg-deeper text-ink">
+        <div className="text-center">
+          <div className="font-mono text-[10px] uppercase tracking-[0.22em] text-amber">
+            finishing sign in
+          </div>
+          <div className="mt-3 font-serif text-3xl italic">Opening Cohort...</div>
+        </div>
+      </div>
+    );
+  }
 
   if (!authenticated) {
     return (
@@ -223,5 +276,18 @@ export default function App() {
     );
   }
 
-  return <DashboardApp profile={profile} />;
+  const handleSignOut = async () => {
+    await signOut();
+    const nextProfile: OnboardingData = {
+      ...loadOnboarding(),
+      step: 'welcome',
+      authenticated: false,
+      authProvider: null,
+    };
+    saveOnboarding(nextProfile);
+    setProfile(nextProfile);
+    setAuthenticated(false);
+  };
+
+  return <DashboardApp profile={profile} onSignOut={handleSignOut} />;
 }

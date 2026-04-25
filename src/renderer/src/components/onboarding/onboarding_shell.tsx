@@ -187,13 +187,14 @@ export function OnboardingShell({
                 type="button"
                 variant="amber"
                 size="lg"
-                onClick={atAuth ? onComplete : onNext}
+                onClick={atAuth ? undefined : onNext}
+                disabled={atAuth}
                 className="min-w-[138px]"
               >
                 {atAuth ? (
                   <>
                     <Check className="h-4 w-4" />
-                    Enter App
+                    Sign In Above
                   </>
                 ) : (
                   <>
