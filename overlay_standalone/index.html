@@ -133,6 +133,12 @@
       // ── Friend avatars (poll every 30s) ────────────────────────────────
       const friendAvatarMap = {};
 
+      const ORB_COLORS = {
+        amber: '#E8A87C', blue: '#7CB0E8', green: '#9CE8A8',
+        purple: '#B89AE8', coral: '#E8756B', moss: '#7FA075',
+        gold: '#D8B75C', slate: '#51616B',
+      };
+
       async function syncFriendAvatars() {
         try {
           const cfg = await window.electronAPI.getConfig();
@@ -148,8 +154,11 @@
             `${url}/rest/v1/friendships?user_id=eq.${cfg.USER_ID}&select=friend_ids`,
             { headers },
           );
-          const [fRow] = await fResp.json();
+          const fData = await fResp.json();
+          if (!fResp.ok) { console.warn('[friends] friendships fetch error:', fData); return; }
+          const [fRow] = Array.isArray(fData) ? fData : [];
           const friendIds = fRow?.friend_ids ?? [];
+          console.log('[friends] friend_ids:', friendIds);
           if (friendIds.length === 0) return;
 
           const pResp = await fetch(
@@ -157,6 +166,7 @@
             { headers },
           );
           const profiles = await pResp.json();
+          console.log('[friends] profiles:', profiles.map((p) => ({ u: p.username, status: p.hardware_status, hasAvatar: !!p.avatar })));
 
           const avatarsEl = document.getElementById('avatars');
           const seenIds = new Set();
@@ -166,15 +176,22 @@
             const isDocked = p.hardware_status === 'docked';
             const existing = friendAvatarMap[p.id];
 
-            if (isDocked && !existing && p.avatar) {
+            if (isDocked && !existing) {
               const div = document.createElement('div');
               div.className = 'avatar status-active';
-              div.style.cssText = 'background:transparent;';
-              div.innerHTML = window.renderPixelAvatar(p.avatar)
-                + `<span class="name">${p.username ?? '?'}</span>`;
+              let body = '';
+              if (p.avatar) {
+                div.style.cssText = 'background:transparent;';
+                body = window.renderPixelAvatar(p.avatar);
+              } else {
+                const bg = ORB_COLORS[p.orb_color] ?? '#51616B';
+                div.style.cssText = `background:${bg};`;
+                body = `<span style="font-size:14px;font-weight:600;color:rgba(255,255,255,0.85)">${(p.username?.[0] ?? '?').toUpperCase()}</span>`;
+              }
+              div.innerHTML = body + `<span class="name">${p.username ?? '?'}</span>`;
               avatarsEl.appendChild(div);
               friendAvatarMap[p.id] = div;
-              console.log('[friends] appeared:', p.username);
+              console.log('[friends] appeared:', p.username, '(avatar:', !!p.avatar, ')');
             } else if (!isDocked && existing) {
               existing.remove();
               delete friendAvatarMap[p.id];
