@@ -7,6 +7,10 @@ const COLOR_MAP: Record<string, string> = {
   blue: '#7CB0E8',
   purple: '#B89AE8',
   green: '#9CE8A8',
+  coral: '#E8756B',
+  moss: '#7FA075',
+  gold: '#D8B75C',
+  slate: '#51616B',
 };
 
 type Props = {
