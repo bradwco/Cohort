@@ -11,7 +11,7 @@ const path = require('node:path');
 function createOverlay() {
   const { workArea } = screen.getPrimaryDisplay();
   const width = 280;
-  const height = 460;
+  const height = 380;
 
   const win = new BrowserWindow({
     width,

@@ -5,12 +5,13 @@
     <title>Focus Orb Overlay (standalone)</title>
     <style>
       :root {
-        --bg:        rgba(26, 26, 30, 0.72);
-        --border:    rgba(255, 255, 255, 0.06);
-        --divider:   rgba(255, 255, 255, 0.10);
-        --text:      #dcd9d2;
-        --text-soft: #a8a59e;
-        --hover:     rgba(255, 255, 255, 0.10);
+        --bg:        rgba(15, 19, 27, 0.86);
+        --border:    rgba(255, 255, 255, 0.04);
+        --divider:   rgba(255, 255, 255, 0.06);
+        --text:      #e6dfd1;
+        --text-soft: #8e8676;
+        --hover:     rgba(255, 255, 255, 0.06);
+        --accent:    #e8a87c;
       }
 
       html, body {
@@ -26,23 +27,23 @@
         cursor: default;
       }
 
-      /* Vertical column pinned to the right edge of the window. */
+      /* Floating curvy pill pinned to the middle-right of the window. */
       .column {
         position: absolute;
-        top: 0;
-        right: 0;
-        bottom: 0;
-        width: 72px;
+        top: 50%;
+        right: 8px;
+        transform: translateY(-50%);
+        width: 76px;
         display: flex;
         flex-direction: column;
         align-items: center;
-        justify-content: center;
         gap: 14px;
-        padding: 22px 12px;
+        padding: 18px 12px;
         background: var(--bg);
         backdrop-filter: blur(16px);
         -webkit-backdrop-filter: blur(16px);
-        border-left: 1px solid var(--border);
+        border: 1px solid var(--border);
+        border-radius: 38px;
         box-sizing: border-box;
       }
 
@@ -66,12 +67,14 @@
         font-size: 13px;
         font-weight: 500;
         letter-spacing: 0.3px;
-        transition: transform 0.18s ease, box-shadow 0.18s ease;
+        transition: transform 0.18s ease;
       }
-      .avatar:hover {
-        transform: scale(1.08);
-        box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.12);
-      }
+      .avatar:hover { transform: scale(1.08); }
+
+      /* Status glows — placeholder until wired to real presence data. */
+      .status-active { box-shadow: 0 0 14px 0 rgba(122, 196, 128, 0.55); }
+      .status-idle   { box-shadow: 0 0 10px 0 rgba(150, 145, 138, 0.45); }
+      .status-off    { box-shadow: 0 0 14px 0 rgba(214, 110, 100, 0.55); }
 
       /* Hover label — renders to the LEFT of the avatar (window has transparent
          padding on the left specifically for this). */
@@ -81,10 +84,10 @@
         top: 50%;
         transform: translateY(-50%);
         white-space: nowrap;
-        background: rgba(20, 20, 24, 0.94);
+        background: rgba(12, 15, 22, 0.95);
         color: var(--text);
-        padding: 6px 11px;
-        border-radius: 8px;
+        padding: 6px 12px;
+        border-radius: 14px;
         font-size: 12px;
         font-weight: 400;
         opacity: 0;
@@ -102,45 +105,52 @@
       }
 
       .timer {
-        font-size: 17px;
+        font-family: "Cormorant Garamond", "Playfair Display", Georgia, "Times New Roman", serif;
+        font-size: 22px;
         font-weight: 500;
-        letter-spacing: 0.6px;
+        letter-spacing: 0.5px;
         color: var(--text);
         font-variant-numeric: tabular-nums;
       }
 
       .stop {
+        width: 32px;
+        height: 32px;
+        padding: 0;
         background: rgba(255, 255, 255, 0.05);
         color: var(--text-soft);
         border: 1px solid var(--border);
-        border-radius: 18px;
-        padding: 6px 14px;
-        font: inherit;
-        font-size: 11px;
-        font-weight: 500;
-        letter-spacing: 0.4px;
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
         cursor: pointer;
         transition: background 0.15s ease, color 0.15s ease;
       }
       .stop:hover  { background: var(--hover); color: var(--text); }
       .stop:active { background: rgba(255, 255, 255, 0.16); }
+      .stop svg    { display: block; }
     </style>
   </head>
   <body>
     <div class="column">
       <div class="avatars">
-        <div class="avatar" style="--c: #9c9088;">A<span class="name">Alex Chen</span></div>
-        <div class="avatar" style="--c: #8a958e;">M<span class="name">Maya Rodriguez</span></div>
-        <div class="avatar" style="--c: #93939a;">J<span class="name">Jamie Park</span></div>
-        <div class="avatar" style="--c: #a89483;">S<span class="name">Sam Taylor</span></div>
-        <div class="avatar" style="--c: #97889c;">R<span class="name">Riley Singh</span></div>
+        <div class="avatar status-active" style="--c: #c19a7a;">A<span class="name">Alex Chen</span></div>
+        <div class="avatar status-idle"   style="--c: #9a8770;">M<span class="name">Maya Rodriguez</span></div>
+        <div class="avatar status-active" style="--c: #8a7d6a;">J<span class="name">Jamie Park</span></div>
+        <div class="avatar status-off"    style="--c: #b08568;">S<span class="name">Sam Taylor</span></div>
+        <div class="avatar status-active" style="--c: #7d8278;">R<span class="name">Riley Singh</span></div>
       </div>
 
       <div class="divider"></div>
 
       <div class="timer" id="timer">25:00</div>
 
-      <button class="stop" id="stop">Stop</button>
+      <button class="stop" id="stop" aria-label="Stop session" title="Stop">
+        <svg width="10" height="10" viewBox="0 0 10 10" fill="currentColor" aria-hidden="true">
+          <rect x="0" y="0" width="10" height="10" rx="1.5" />
+        </svg>
+      </button>
     </div>
 
     <script>
