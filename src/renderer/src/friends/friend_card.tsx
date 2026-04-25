@@ -4,6 +4,7 @@ import { PixelOrbMini } from '../orb_character/pixel_orb_mini';
 import { cn, hexA } from '../shared_ui/cn';
 
 export type Friend = {
+  id: string;
   name: string;
   task: string;
   rem: number | null;
@@ -16,9 +17,11 @@ type Props = {
   friend: Friend;
   delay: number;
   fmt: (s: number) => string;
+  incomingNudge?: boolean;
+  onNudge: (friend: Friend) => void;
 };
 
-export function FriendCard({ friend, delay, fmt }: Props) {
+export function FriendCard({ friend, delay, fmt, incomingNudge = false, onNudge }: Props) {
   const [hover, setHover] = useState(false);
   const [nudged, setNudged] = useState(false);
   const offline = friend.state === 'offline';
@@ -27,6 +30,7 @@ export function FriendCard({ friend, delay, fmt }: Props) {
 
   const handleNudge = (e: React.MouseEvent) => {
     e.stopPropagation();
+    onNudge(friend);
     setNudged(true);
     setTimeout(() => setNudged(false), 1200);
   };
@@ -65,12 +69,17 @@ export function FriendCard({ friend, delay, fmt }: Props) {
       )}
 
       <div className="mb-3.5 flex items-center gap-3">
-        <PixelOrbMini color={color} pulse={!offline && !paused} flash={nudged} />
+        <PixelOrbMini color={color} pulse={!offline && !paused} flash={nudged || incomingNudge} />
         <div className="min-w-0 flex-1">
           <div className="font-serif text-base italic text-ink">{friend.name}</div>
           <div className="mt-0.5 font-mono text-[10px] tracking-wide text-ink-faint">
             {friend.task}
           </div>
+          {incomingNudge && (
+            <div className="mt-1 font-mono text-[9px] uppercase tracking-[0.12em] text-amber">
+              nudged you just now
+            </div>
+          )}
         </div>
         {offline && (
           <span className="font-mono text-[9px] uppercase tracking-[0.12em] text-ink-faint">
@@ -103,21 +112,19 @@ export function FriendCard({ friend, delay, fmt }: Props) {
           </div>
           <div className="mt-1.5 flex justify-between font-mono text-[10px] tracking-wide text-ink-dim">
             <span>{fmt(friend.rem)} remaining</span>
-            <span className="text-ink-faint">{friend.pickup} lifts</span>
+            <span className="text-ink-faint">{friend.pickup ?? 0} lifts</span>
           </div>
         </div>
       )}
 
       <button
-        onClick={offline ? undefined : handleNudge}
+        onClick={handleNudge}
         className={cn(
           'w-full rounded border px-0 py-[7px] font-mono text-[11px] tracking-wide transition-all duration-200',
-          !offline && nudged
-            ? ''
-            : 'border-line-mid bg-transparent text-ink-dim hover:bg-white/[0.03]',
+          nudged ? '' : 'border-line-mid bg-transparent text-ink-dim hover:bg-white/[0.03]',
         )}
         style={
-          !offline && nudged
+          nudged
             ? {
                 background: hexA(color, 0.15),
                 borderColor: color,
@@ -126,7 +133,7 @@ export function FriendCard({ friend, delay, fmt }: Props) {
             : undefined
         }
       >
-        {offline ? 'send invite' : nudged ? '✓ nudge sent' : 'nudge'}
+        {nudged ? 'nudge sent' : offline ? 'send nudge' : 'nudge'}
       </button>
     </motion.div>
   );

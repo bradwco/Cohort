@@ -2,21 +2,22 @@ export const CH = {
   // App
   PING: 'app:ping',
 
-  // Supabase — profiles
+  // Supabase - profiles
   PROFILE_GET: 'supabase:profile-get',
   PROFILE_UPDATE: 'supabase:profile-update',
 
-  // Supabase — friends
+  // Supabase - friends
   FRIENDS_LIST: 'supabase:friends-list',
   FRIEND_ADD: 'supabase:friend-add',
   PROFILE_SEARCH: 'supabase:profile-search',
+  FRIEND_NUDGE_SEND: 'friends:nudge-send',
 
-  // Supabase — sessions
+  // Supabase - sessions
   SESSION_START: 'supabase:session-start',
   SESSION_END: 'supabase:session-end',
   SESSION_HISTORY: 'supabase:session-history',
 
-  // Supabase — activity logs
+  // Supabase - activity logs
   ACTIVITY_LOG: 'supabase:activity-log',
   ACTIVITY_LOGS_GET: 'supabase:activity-logs-get',
 
@@ -30,10 +31,11 @@ export const CH = {
   MQTT_PAUSE_STATS: 'mqtt:pause-stats',
 } as const;
 
-// Renderer-bound push events (main → renderer via webContents.send)
+// Renderer-bound push events (main -> renderer via webContents.send)
 export const PUSH = {
   MQTT_CONNECTED: 'mqtt:connected',
   MQTT_OWN_STATE: 'mqtt:own-state',
   MQTT_FRIEND_STATE: 'mqtt:friend-state',
+  FRIEND_NUDGE: 'friends:nudge',
   DEEP_LINK: 'app:deep-link',
 } as const;

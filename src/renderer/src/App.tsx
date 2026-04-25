@@ -88,6 +88,11 @@ function DashboardApp({
   const sessionActive = orbStatus !== 'offline';
 
   useEffect(() => {
+    if (!userId || !window.api) return;
+    void window.api.initMqtt(userId);
+  }, [userId]);
+
+  useEffect(() => {
     if (orbStatus !== 'docked') return;
     const id = setInterval(() => setSecondsLeft((s) => Math.max(0, s - 1)), 1000);
     return () => clearInterval(id);
@@ -156,6 +161,7 @@ function DashboardApp({
     >
       <GrainOverlay />
       <HwSimulator
+        userId={userId}
         activeGroup={activeGroup}
         groups={groups}
         initialDuration={profile.sessionLength}

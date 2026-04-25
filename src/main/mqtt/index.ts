@@ -7,6 +7,7 @@ let currentUserId: string | null = null;
 let activeSessionId: string | null = null;
 let pauseStart: number | null = null;
 let totalPauseMs = 0;
+const simulatedFriendPauses = new Map<string, { pauseStart: number | null; totalPauseMs: number }>();
 
 export function getMqttClient(): MqttClient | null {
   return client;
@@ -80,6 +81,11 @@ export async function simulateHardwareEvent(
   userId: string,
   payload: Record<string, unknown>,
 ): Promise<void> {
+  if (currentUserId && userId !== currentUserId) {
+    await handleSimulatedFriendState(userId, payload);
+    return;
+  }
+
   currentUserId = userId;
   await handleOwnOrbState(payload);
 }
@@ -116,7 +122,10 @@ async function handleOwnOrbState(payload: Record<string, unknown>): Promise<void
       if (session) activeSessionId = session.id;
     }
 
-    await updateProfile(currentUserId!, { hardware_status: 'docked' });
+    await updateProfile(currentUserId!, {
+      hardware_status: 'docked',
+      current_activity: workflowGroup,
+    });
     pauseStart = null;
     broadcastToRenderer('mqtt:own-state', { status: 'docked', sessionId: activeSessionId, duration, workflowGroup });
   }
@@ -137,6 +146,55 @@ async function handleOwnOrbState(payload: Record<string, unknown>): Promise<void
     pauseStart = null;
     await updateProfile(currentUserId!, { hardware_status: 'docked' });
     broadcastToRenderer('mqtt:own-state', { status: 'docked', totalPauseMs, sessionId: activeSessionId });
+  }
+}
+
+async function handleSimulatedFriendState(
+  userId: string,
+  payload: Record<string, unknown>,
+): Promise<void> {
+  const status = payload.status as string | undefined;
+  const existing = simulatedFriendPauses.get(userId) ?? { pauseStart: null, totalPauseMs: 0 };
+
+  if (status === 'docked') {
+    const workflowGroup = (payload.workflowGroup as string | undefined) ?? 'Focus Session';
+    simulatedFriendPauses.set(userId, { pauseStart: null, totalPauseMs: existing.totalPauseMs });
+    await updateProfile(userId, {
+      hardware_status: 'docked',
+      current_activity: workflowGroup,
+    });
+    broadcastToRenderer('mqtt:friend-state', {
+      userId,
+      status: 'docked',
+      workflowGroup,
+      totalPauseMs: existing.totalPauseMs,
+    });
+    return;
+  }
+
+  if (status === 'undocked') {
+    simulatedFriendPauses.set(userId, { ...existing, pauseStart: Date.now() });
+    await updateProfile(userId, { hardware_status: 'offline' });
+    broadcastToRenderer('mqtt:friend-state', {
+      userId,
+      status: 'undocked',
+      totalPauseMs: existing.totalPauseMs,
+    });
+    return;
+  }
+
+  if (status === 'redocked') {
+    const total =
+      existing.pauseStart != null
+        ? existing.totalPauseMs + (Date.now() - existing.pauseStart)
+        : existing.totalPauseMs;
+    simulatedFriendPauses.set(userId, { pauseStart: null, totalPauseMs: total });
+    await updateProfile(userId, { hardware_status: 'docked' });
+    broadcastToRenderer('mqtt:friend-state', {
+      userId,
+      status: 'docked',
+      totalPauseMs: total,
+    });
   }
 }
 

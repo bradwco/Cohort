@@ -11,6 +11,8 @@ const api = {
   getFriends: (userId: string) => ipcRenderer.invoke(CH.FRIENDS_LIST, userId),
   searchProfile: (username: string) => ipcRenderer.invoke(CH.PROFILE_SEARCH, username),
   addFriend: (userId: string, friendId: string) => ipcRenderer.invoke(CH.FRIEND_ADD, userId, friendId),
+  sendFriendNudge: (fromUserId: string, toUserId: string, fromName: string) =>
+    ipcRenderer.invoke(CH.FRIEND_NUDGE_SEND, fromUserId, toUserId, fromName),
 
   // Sessions
   startSession: (userId: string, workflowGroup: string, durationMins: number) =>
@@ -28,11 +30,10 @@ const api = {
   initMqtt: (userId: string) => ipcRenderer.invoke(CH.MQTT_INIT, userId),
   publishCommand: (userId: string, command: Record<string, unknown>) =>
     ipcRenderer.invoke(CH.MQTT_PUBLISH_COMMAND, userId, command),
-  subscribeFriends: (friendIds: string[]) =>
-    ipcRenderer.invoke(CH.MQTT_SUBSCRIBE_FRIENDS, friendIds),
+  subscribeFriends: (friendIds: string[]) => ipcRenderer.invoke(CH.MQTT_SUBSCRIBE_FRIENDS, friendIds),
   getPauseStats: () => ipcRenderer.invoke(CH.MQTT_PAUSE_STATS),
 
-  // Push listeners (hardware → renderer) — each returns a cleanup function
+  // Push listeners
   onMqttConnected: (cb: (data: unknown) => void) => {
     const h = (_e: Electron.IpcRendererEvent, data: unknown) => cb(data);
     ipcRenderer.on(PUSH.MQTT_CONNECTED, h);
@@ -48,12 +49,17 @@ const api = {
     ipcRenderer.on(PUSH.MQTT_FRIEND_STATE, h);
     return () => ipcRenderer.off(PUSH.MQTT_FRIEND_STATE, h);
   },
+  onFriendNudge: (cb: (data: unknown) => void) => {
+    const h = (_e: Electron.IpcRendererEvent, data: unknown) => cb(data);
+    ipcRenderer.on(PUSH.FRIEND_NUDGE, h);
+    return () => ipcRenderer.off(PUSH.FRIEND_NUDGE, h);
+  },
 
-  // Hardware simulator (dev only)
+  // Hardware simulator
   simulateHardware: (userId: string, payload: Record<string, unknown>) =>
     ipcRenderer.invoke(CH.HW_SIMULATE, userId, payload),
 
-  // Deep link (custom protocol callbacks from Supabase auth)
+  // Deep link
   onDeepLink: (cb: (url: string) => void) => {
     const h = (_e: Electron.IpcRendererEvent, url: unknown) => cb(url as string);
     ipcRenderer.on(PUSH.DEEP_LINK, h);

@@ -299,7 +299,7 @@ export async function startGoogleAuth(data: OnboardingData) {
 // In Electron the app handles cohort:// deep links so auth redirects
 // come back to the app. In a plain browser we fall back to the page URL.
 function getRedirectUrl(data?: OnboardingData) {
-  const isElectron = typeof window !== 'undefined' && Boolean((window as Record<string, unknown>).api);
+  const isElectron = typeof window !== 'undefined' && Boolean((window as unknown as { api?: unknown }).api);
   const base = isElectron
     ? 'cohort://auth-callback'
     : `${window.location.origin}${window.location.pathname}`;
