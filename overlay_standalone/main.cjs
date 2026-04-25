@@ -24,7 +24,11 @@ ipcMain.on('set-ignore-mouse-events', (event, ignore) => {
   BrowserWindow.fromWebContents(event.sender)?.setIgnoreMouseEvents(ignore, { forward: true });
 });
 
-ipcMain.handle('get-config', () => ({ GEMINI_API_KEY: env.GEMINI_API_KEY || '' }));
+ipcMain.handle('get-config', () => ({
+  GEMINI_API_KEY: env.GEMINI_API_KEY || '',
+  LOCAL_VLM_URL: env.LOCAL_VLM_URL || 'http://127.0.0.1:11434/api/chat',
+  LOCAL_VLM_MODEL: env.LOCAL_VLM_MODEL || 'moondream',
+}));
 
 ipcMain.handle('take-screenshot', async () => {
   const { width, height } = screen.getPrimaryDisplay().workAreaSize;
@@ -33,6 +37,50 @@ ipcMain.handle('take-screenshot', async () => {
     thumbnailSize: { width, height },
   });
   return sources[0]?.thumbnail.toDataURL() ?? null;
+});
+
+ipcMain.handle('take-thumbnail', async () => {
+  const sources = await desktopCapturer.getSources({
+    types: ['screen'],
+    thumbnailSize: { width: 960, height: 540 },
+  });
+  return sources[0]?.thumbnail.toDataURL() ?? null;
+});
+
+ipcMain.handle('classify-screen', async (_event, { imageDataUrl, endpoint, model }) => {
+  const base64 = imageDataUrl.split(',')[1];
+  const prompt = [
+    'Classify this screen for a focus timer.',
+    'Use context, not just app names.',
+    'Return exactly one label:',
+    'deep_work = coding, writing, design, studying, technical reading',
+    'admin = calendar, email, settings, planning, short operational work',
+    'distracted = entertainment, shopping, social feeds, games, memes, unrelated browsing',
+  ].join('\n');
+
+  const resp = await fetch(endpoint || env.LOCAL_VLM_URL || 'http://127.0.0.1:11434/api/chat', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      model: model || env.LOCAL_VLM_MODEL || 'moondream',
+      stream: false,
+      messages: [{
+        role: 'user',
+        content: prompt,
+        images: [base64],
+      }],
+    }),
+  });
+
+  if (!resp.ok) throw new Error(`Local classifier ${resp.status}`);
+
+  const data = await resp.json();
+  const text = String(data.message?.content ?? data.response ?? '').toLowerCase().trim();
+  if (text.includes('distracted') || text.includes('distraction')) return 'distracted';
+  if (text.includes('admin')) return 'admin';
+  if (text.includes('deep')) return 'deep_work';
+  if (text.includes('productive')) return 'deep_work';
+  return 'distracted';
 });
 
 function createOverlay() {
