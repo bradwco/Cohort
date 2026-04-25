@@ -2,6 +2,17 @@ import mqtt, { MqttClient } from 'mqtt';
 import { BrowserWindow } from 'electron';
 import { updateProfile, startSession, logActivity } from '../supabase';
 
+type OrbPayload = {
+  status?: 'docked' | 'undocked' | 'redocked' | 'offline';
+  duration?: number;
+  workflowGroup?: string;
+  totalPauseMs?: number;
+  sessionStartedAt?: string;
+  plannedDurationMinutes?: number;
+  pauseStart?: number;
+  origin?: 'desktop-sim' | 'orb';
+};
+
 let client: MqttClient | null = null;
 let currentUserId: string | null = null;
 let activeSessionId: string | null = null;
@@ -29,7 +40,7 @@ export function initMqtt(userId: string): void {
   const password = import.meta.env.MQTT_PASS as string;
 
   if (!url) {
-    console.warn('MQTT_URL not set — skipping MQTT connection');
+    console.warn('MQTT_URL not set - skipping MQTT connection');
     return;
   }
 
@@ -50,7 +61,7 @@ export function initMqtt(userId: string): void {
   client.on('error', (err) => console.error('[MQTT] Error:', err.message));
 
   client.on('message', (topic, payload) => {
-    handleIncoming(topic, payload.toString());
+    void handleIncoming(topic, payload.toString());
   });
 }
 
@@ -75,48 +86,44 @@ export function destroyMqtt(): void {
   totalPauseMs = 0;
 }
 
-// --- Simulate hardware events without a real ESP32 ---
-
-export async function simulateHardwareEvent(
-  userId: string,
-  payload: Record<string, unknown>,
-): Promise<void> {
+export async function simulateHardwareEvent(userId: string, payload: Record<string, unknown>): Promise<void> {
   if (currentUserId && userId !== currentUserId) {
-    await handleSimulatedFriendState(userId, payload);
+    await handleSimulatedFriendState(userId, payload as OrbPayload);
     return;
   }
 
   currentUserId = userId;
-  await handleOwnOrbState(payload);
+  await handleOwnOrbState(payload as OrbPayload);
 }
 
-// --- Inbound hardware event handling ---
-
 async function handleIncoming(topic: string, raw: string): Promise<void> {
-  let payload: Record<string, unknown>;
-  try { payload = JSON.parse(raw); } catch { return; }
+  let payload: OrbPayload;
+  try {
+    payload = JSON.parse(raw) as OrbPayload;
+  } catch {
+    return;
+  }
 
-  // Own orb state
   if (currentUserId && topic === `focus-orb/${currentUserId}/state`) {
+    if (payload.origin === 'desktop-sim') return;
     await handleOwnOrbState(payload);
     return;
   }
 
-  // Friend orb state — forward to renderer
   const friendMatch = topic.match(/^focus-orb\/(.+)\/state$/);
   if (friendMatch) {
     broadcastToRenderer('mqtt:friend-state', { userId: friendMatch[1], ...payload });
   }
 }
 
-async function handleOwnOrbState(payload: Record<string, unknown>): Promise<void> {
-  const status = payload.status as string | undefined;
+async function handleOwnOrbState(payload: OrbPayload): Promise<void> {
+  const status = payload.status;
 
   if (status === 'docked') {
-    const duration = (payload.duration as number) ?? 60;
-    const workflowGroup = (payload.workflowGroup as string | undefined) ?? 'Focus Session';
+    const duration = payload.plannedDurationMinutes ?? payload.duration ?? 60;
+    const workflowGroup = payload.workflowGroup ?? 'Focus Session';
+    const sessionStartedAt = payload.sessionStartedAt ?? new Date().toISOString();
 
-    // Start a new session if none active
     if (!activeSessionId && currentUserId) {
       const session = await startSession(currentUserId, workflowGroup, duration);
       if (session) activeSessionId = session.id;
@@ -127,37 +134,79 @@ async function handleOwnOrbState(payload: Record<string, unknown>): Promise<void
       current_activity: workflowGroup,
     });
     pauseStart = null;
-    broadcastToRenderer('mqtt:own-state', { status: 'docked', sessionId: activeSessionId, duration, workflowGroup });
+
+    const ownPayload = {
+      status: 'docked',
+      sessionId: activeSessionId,
+      duration,
+      workflowGroup,
+      totalPauseMs: payload.totalPauseMs ?? totalPauseMs,
+      sessionStartedAt,
+      plannedDurationMinutes: duration,
+    };
+
+    broadcastToRenderer('mqtt:own-state', ownPayload);
+    publishOwnState({ ...ownPayload, origin: 'desktop-sim' });
+    return;
   }
 
   if (status === 'undocked') {
-    pauseStart = Date.now();
+    pauseStart = payload.pauseStart ?? Date.now();
 
     if (activeSessionId && currentUserId) {
       await logActivity(activeSessionId, currentUserId, 'hardware_break', { sensor: 'undocked' });
     }
 
     await updateProfile(currentUserId!, { hardware_status: 'offline' });
-    broadcastToRenderer('mqtt:own-state', { status: 'undocked', pauseStart });
+    const ownPayload = {
+      status: 'undocked',
+      pauseStart,
+      totalPauseMs,
+      sessionStartedAt: payload.sessionStartedAt,
+      plannedDurationMinutes: payload.plannedDurationMinutes ?? payload.duration,
+      workflowGroup: payload.workflowGroup,
+    };
+    broadcastToRenderer('mqtt:own-state', ownPayload);
+    publishOwnState({ ...ownPayload, origin: 'desktop-sim' });
+    return;
   }
 
   if (status === 'redocked' && pauseStart !== null) {
     totalPauseMs += Date.now() - pauseStart;
     pauseStart = null;
     await updateProfile(currentUserId!, { hardware_status: 'docked' });
-    broadcastToRenderer('mqtt:own-state', { status: 'docked', totalPauseMs, sessionId: activeSessionId });
+    const ownPayload = {
+      status: 'docked',
+      totalPauseMs,
+      sessionId: activeSessionId,
+      sessionStartedAt: payload.sessionStartedAt,
+      plannedDurationMinutes: payload.plannedDurationMinutes ?? payload.duration,
+      workflowGroup: payload.workflowGroup,
+    };
+    broadcastToRenderer('mqtt:own-state', ownPayload);
+    publishOwnState({ ...ownPayload, origin: 'desktop-sim' });
+    return;
+  }
+
+  if (status === 'offline') {
+    pauseStart = null;
+    totalPauseMs = 0;
+    activeSessionId = null;
+    await updateProfile(currentUserId!, { hardware_status: 'offline' });
+    const ownPayload = { status: 'offline' };
+    broadcastToRenderer('mqtt:own-state', ownPayload);
+    publishOwnState({ ...ownPayload, origin: 'desktop-sim' });
   }
 }
 
-async function handleSimulatedFriendState(
-  userId: string,
-  payload: Record<string, unknown>,
-): Promise<void> {
-  const status = payload.status as string | undefined;
+async function handleSimulatedFriendState(userId: string, payload: OrbPayload): Promise<void> {
+  const status = payload.status;
   const existing = simulatedFriendPauses.get(userId) ?? { pauseStart: null, totalPauseMs: 0 };
 
   if (status === 'docked') {
-    const workflowGroup = (payload.workflowGroup as string | undefined) ?? 'Focus Session';
+    const workflowGroup = payload.workflowGroup ?? 'Focus Session';
+    const plannedDurationMinutes = payload.plannedDurationMinutes ?? payload.duration ?? 60;
+    const sessionStartedAt = payload.sessionStartedAt ?? new Date().toISOString();
     simulatedFriendPauses.set(userId, { pauseStart: null, totalPauseMs: existing.totalPauseMs });
     await updateProfile(userId, {
       hardware_status: 'docked',
@@ -168,34 +217,54 @@ async function handleSimulatedFriendState(
       status: 'docked',
       workflowGroup,
       totalPauseMs: existing.totalPauseMs,
+      sessionStartedAt,
+      plannedDurationMinutes,
     });
     return;
   }
 
   if (status === 'undocked') {
-    simulatedFriendPauses.set(userId, { ...existing, pauseStart: Date.now() });
+    const nextPauseStart = payload.pauseStart ?? Date.now();
+    simulatedFriendPauses.set(userId, { ...existing, pauseStart: nextPauseStart });
     await updateProfile(userId, { hardware_status: 'offline' });
     broadcastToRenderer('mqtt:friend-state', {
       userId,
       status: 'undocked',
+      pauseStart: nextPauseStart,
       totalPauseMs: existing.totalPauseMs,
+      sessionStartedAt: payload.sessionStartedAt,
+      plannedDurationMinutes: payload.plannedDurationMinutes ?? payload.duration,
+      workflowGroup: payload.workflowGroup,
     });
     return;
   }
 
   if (status === 'redocked') {
     const total =
-      existing.pauseStart != null
-        ? existing.totalPauseMs + (Date.now() - existing.pauseStart)
-        : existing.totalPauseMs;
+      existing.pauseStart != null ? existing.totalPauseMs + (Date.now() - existing.pauseStart) : existing.totalPauseMs;
     simulatedFriendPauses.set(userId, { pauseStart: null, totalPauseMs: total });
     await updateProfile(userId, { hardware_status: 'docked' });
     broadcastToRenderer('mqtt:friend-state', {
       userId,
       status: 'docked',
       totalPauseMs: total,
+      sessionStartedAt: payload.sessionStartedAt,
+      plannedDurationMinutes: payload.plannedDurationMinutes ?? payload.duration,
+      workflowGroup: payload.workflowGroup,
     });
+    return;
   }
+
+  if (status === 'offline') {
+    simulatedFriendPauses.set(userId, { pauseStart: null, totalPauseMs: 0 });
+    await updateProfile(userId, { hardware_status: 'offline' });
+    broadcastToRenderer('mqtt:friend-state', { userId, status: 'offline' });
+  }
+}
+
+function publishOwnState(payload: Record<string, unknown>): void {
+  if (!client?.connected || !currentUserId) return;
+  client.publish(`focus-orb/${currentUserId}/state`, JSON.stringify(payload), { retain: true });
 }
 
 function broadcastToRenderer(channel: string, data: unknown): void {

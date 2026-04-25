@@ -15,6 +15,9 @@ type LiveState = {
   status: 'docked' | 'undocked' | 'offline';
   workflowGroup?: string;
   totalPauseMs?: number;
+  pauseStart?: number;
+  sessionStartedAt?: string;
+  plannedDurationMinutes?: number;
   pickupCount: number;
 };
 
@@ -25,6 +28,20 @@ type NudgeEvent = {
   toUserId: string;
   sentAt: string;
 };
+
+function getFriendRemainingSeconds(live?: LiveState): number | null {
+  if (!live?.sessionStartedAt || !live.plannedDurationMinutes) return null;
+
+  const startedAtMs = Date.parse(live.sessionStartedAt);
+  if (Number.isNaN(startedAtMs)) return null;
+
+  const totalSessionMs = live.plannedDurationMinutes * 60 * 1000;
+  const totalPauseMs = live.totalPauseMs ?? 0;
+  const effectiveNow = live.status === 'undocked' && live.pauseStart != null ? live.pauseStart : Date.now();
+  const activeElapsedMs = Math.max(0, effectiveNow - startedAtMs - totalPauseMs);
+
+  return Math.max(0, Math.ceil((totalSessionMs - activeElapsedMs) / 1000));
+}
 
 function profileToFriend(p: ProfileRow, live?: LiveState): Friend {
   const state =
@@ -45,7 +62,7 @@ function profileToFriend(p: ProfileRow, live?: LiveState): Friend {
         : state === 'pause'
           ? 'paused'
           : 'offline',
-    rem: live ? 3600 : null,
+    rem: getFriendRemainingSeconds(live),
     color: p.orb_color ?? null,
     state,
     pickup: live?.pickupCount ?? null,
@@ -66,7 +83,15 @@ export function DeskMap({ userId, fmt }: Props) {
   const [searchInput, setSearchInput] = useState('');
   const [searchResult, setSearchResult] = useState<ProfileRow | null | 'not-found' | 'searching'>(null);
   const [addStatus, setAddStatus] = useState<'idle' | 'adding' | 'done' | 'error'>('idle');
+  const [, setNowTick] = useState(Date.now());
   const searchTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    const interval = window.setInterval(() => setNowTick(Date.now()), 1000);
+    return () => {
+      window.clearInterval(interval);
+    };
+  }, []);
 
   useEffect(() => {
     if (!userId || !window.api) return;
@@ -86,7 +111,16 @@ export function DeskMap({ userId, fmt }: Props) {
     if (!window.api) return;
 
     const cleanup = window.api.onFriendState((raw) => {
-      const data = raw as { userId: string; status: string; workflowGroup?: string; totalPauseMs?: number };
+      const data = raw as {
+        userId: string;
+        status: string;
+        workflowGroup?: string;
+        totalPauseMs?: number;
+        pauseStart?: number;
+        sessionStartedAt?: string;
+        plannedDurationMinutes?: number;
+      };
+
       setLiveStates((prev) => {
         const next = new Map(prev);
         const existing = next.get(data.userId) ?? { status: 'offline', pickupCount: 0 };
@@ -95,8 +129,11 @@ export function DeskMap({ userId, fmt }: Props) {
 
         next.set(data.userId, {
           status: data.status as LiveState['status'],
-          workflowGroup: data.workflowGroup,
-          totalPauseMs: data.totalPauseMs,
+          workflowGroup: data.workflowGroup ?? existing.workflowGroup,
+          totalPauseMs: data.totalPauseMs ?? existing.totalPauseMs,
+          pauseStart: data.pauseStart,
+          sessionStartedAt: data.sessionStartedAt ?? existing.sessionStartedAt,
+          plannedDurationMinutes: data.plannedDurationMinutes ?? existing.plannedDurationMinutes,
           pickupCount,
         });
 

@@ -34,6 +34,8 @@ type OwnStatePayload = {
   workflowGroup?: string;
   totalPauseMs?: number;
   sessionId?: string;
+  sessionStartedAt?: string;
+  plannedDurationMinutes?: number;
 };
 
 function getInitialAppState(): {
@@ -133,6 +135,8 @@ function DashboardApp({
       } else if (data.status === 'undocked') {
         setOrbStatus('undocked');
         setLiftCount((c) => c + 1);
+      } else if (data.status === 'offline') {
+        handleSessionEnd();
       }
     });
     return () => { cleanup(); };
