@@ -1,0 +1,16 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npm install *)",
+      "Bash(npm run *)",
+      "Bash(npx electron *)",
+      "Bash(./node_modules/electron/dist/electron.exe --version)",
+      "PowerShell(& \"c:\\\\Users\\\\bradc\\\\Documents\\\\Cohort\\\\node_modules\\\\electron\\\\dist\\\\electron.exe\" --version)",
+      "Bash(./node_modules/electron/dist/electron.exe /tmp/probe.js)",
+      "Bash(./node_modules/electron/dist/electron.exe ./probe.js)",
+      "Bash(timeout 10 ./node_modules/electron/dist/electron.exe .)",
+      "Bash(unset ELECTRON_RUN_AS_NODE)",
+      "Bash(npm uninstall *)"
+    ]
+  }
+}
