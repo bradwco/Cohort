@@ -49,9 +49,9 @@ const api = {
     return () => ipcRenderer.off(PUSH.MQTT_FRIEND_STATE, h);
   },
 
-  // Google auth popup
-  openGoogleAuthPopup: (oauthUrl: string, redirectScheme: string): Promise<string> =>
-    ipcRenderer.invoke(CH.AUTH_GOOGLE_POPUP, oauthUrl, redirectScheme),
+  // Open URL in the system browser
+  openExternal: (url: string): Promise<void> =>
+    ipcRenderer.invoke(CH.OPEN_EXTERNAL, url),
 
   // Hardware simulator (dev only)
   simulateHardware: (userId: string, payload: Record<string, unknown>) =>

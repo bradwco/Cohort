@@ -276,11 +276,20 @@ export async function startGoogleAuth(data: OnboardingData): Promise<AuthSession
   if (error) throw new Error(error.message);
   if (!oauth.url) throw new Error('Supabase did not return a Google auth URL.');
 
-  // Open auth in an Electron popup window; wait for the cohort:// callback
-  const callbackUrl = await window.api.openGoogleAuthPopup(oauth.url, 'cohort://');
-  const session = await completeDeepLinkAuth(callbackUrl);
-  if (!session) throw new Error('Google authentication failed.');
-  return session;
+  // Open Google auth in the system browser (Chrome), then await the cohort:// deep link
+  await window.api.openExternal(oauth.url);
+  return new Promise<AuthSession>((resolve, reject) => {
+    const cleanup = window.api.onDeepLink(async (url: string) => {
+      cleanup();
+      try {
+        const session = await completeDeepLinkAuth(url);
+        if (!session) reject(new Error('Google authentication failed.'));
+        else resolve(session);
+      } catch (err) {
+        reject(err);
+      }
+    });
+  });
 }
 
 export async function signUpWithEmailPassword(
@@ -315,7 +324,7 @@ export async function signInWithEmailPassword(
 // In Electron the app handles cohort:// deep links so auth redirects
 // come back to the app. In a plain browser we fall back to the page URL.
 function getRedirectUrl(data?: OnboardingData) {
-  const isElectron = typeof window !== 'undefined' && Boolean((window as Record<string, unknown>).api);
+  const isElectron = typeof window !== 'undefined' && Boolean((window as unknown as Record<string, unknown>).api);
   const base = isElectron
     ? 'cohort://auth-callback'
     : `${window.location.origin}${window.location.pathname}`;
@@ -341,6 +350,8 @@ export async function completeDeepLinkAuth(deepLinkUrl: string): Promise<AuthSes
     return null;
   }
 
+  console.log('[auth] completeDeepLinkAuth incoming URL:', deepLinkUrl.slice(0, 120));
+
   const redirectProfile = (() => {
     const raw = parsed.searchParams.get('cohort_profile');
     if (!raw) return undefined;
@@ -350,6 +361,7 @@ export async function completeDeepLinkAuth(deepLinkUrl: string): Promise<AuthSes
   // PKCE flow: ?code=xxx
   const code = parsed.searchParams.get('code');
   if (code) {
+    console.log('[auth] deep link: PKCE code exchange');
     const { data, error } = await supabase.auth.exchangeCodeForSession(code);
     if (error || !data.session) {
       console.error('[auth] deep link code exchange failed:', error?.message);
@@ -361,12 +373,16 @@ export async function completeDeepLinkAuth(deepLinkUrl: string): Promise<AuthSes
     return saveSupabaseSession(data.session, redirectProfile);
   }
 
-  // Implicit flow: ?access_token=xxx (some Supabase email templates)
-  const accessToken = parsed.searchParams.get('access_token');
+  // Implicit flow: access_token in query params OR hash fragment
+  const hashParams = new URLSearchParams(parsed.hash.replace(/^#/, ''));
+  const accessToken = parsed.searchParams.get('access_token') ?? hashParams.get('access_token');
+  const refreshToken = parsed.searchParams.get('refresh_token') ?? hashParams.get('refresh_token') ?? '';
+
   if (accessToken) {
+    console.log('[auth] deep link: implicit token exchange');
     const { data, error } = await supabase.auth.setSession({
       access_token: accessToken,
-      refresh_token: parsed.searchParams.get('refresh_token') ?? '',
+      refresh_token: refreshToken,
     });
     if (error || !data.session) {
       console.error('[auth] deep link implicit auth failed:', error?.message);
@@ -375,6 +391,7 @@ export async function completeDeepLinkAuth(deepLinkUrl: string): Promise<AuthSes
     return saveSupabaseSession(data.session, redirectProfile);
   }
 
+  console.error('[auth] deep link: no code or access_token found. search:', parsed.search, 'hash:', parsed.hash.slice(0, 80));
   return null;
 }
 

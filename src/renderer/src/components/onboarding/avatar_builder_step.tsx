@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { motion } from "motion/react";
-import { Shuffle } from "lucide-react";
+import { ArrowRight, Shuffle } from "lucide-react";
 import type { AvatarTraits, OnboardingData } from "../../state/onboarding";
 import { Button } from "../../shared_ui/button";
 import { cn, hexA } from "../../shared_ui/cn";
@@ -106,8 +106,9 @@ export function AvatarBuilderStep({ data, update, direction }: Props) {
   const [availStatus, setAvailStatus] = useState<AvailStatus>("idle");
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const active =
-    AVATAR_TABS.find((tab) => tab.id === activeTab) ?? AVATAR_TABS[0];
+  const activeTabIndex = AVATAR_TABS.findIndex((tab) => tab.id === activeTab);
+  const active = AVATAR_TABS[activeTabIndex] ?? AVATAR_TABS[0];
+  const nextTab = activeTabIndex < AVATAR_TABS.length - 1 ? AVATAR_TABS[activeTabIndex + 1] : null;
   const displayName = data.displayName || "you";
   const username = data.username || makeUsername(data.displayName);
   const backdrop =
@@ -313,7 +314,7 @@ export function AvatarBuilderStep({ data, update, direction }: Props) {
           className="rounded-lg border border-line bg-bg-deeper/45 p-4"
         >
           <div className="grid grid-cols-6 gap-1.5">
-            {AVATAR_TABS.map((tab) => (
+            {AVATAR_TABS.map((tab, index) => (
               <motion.button
                 key={tab.id}
                 type="button"
@@ -321,7 +322,7 @@ export function AvatarBuilderStep({ data, update, direction }: Props) {
                 whileTap={{ scale: 0.97 }}
                 onClick={() => setActiveTab(tab.id)}
                 className={cn(
-                  "relative h-9 rounded border font-mono text-[10px] uppercase tracking-[0.12em] transition-all",
+                  "relative flex h-10 flex-col items-center justify-center rounded border font-mono transition-all",
                   activeTab === tab.id
                     ? "border-amber/35 bg-amber/[0.08] text-amber"
                     : "border-line bg-white/[0.015] text-ink-faint hover:border-line-mid hover:text-ink-dim",
@@ -334,7 +335,8 @@ export function AvatarBuilderStep({ data, update, direction }: Props) {
                     transition={{ duration: 0.28, ease: onboardingEase }}
                   />
                 )}
-                <span className="relative">{tab.label}</span>
+                <span className="relative text-[8px] opacity-50">{String(index + 1).padStart(2, '0')}</span>
+                <span className="relative text-[9px] uppercase tracking-[0.1em]">{tab.label}</span>
               </motion.button>
             ))}
           </div>
@@ -412,6 +414,18 @@ export function AvatarBuilderStep({ data, update, direction }: Props) {
               );
             })}
           </div>
+          {nextTab && (
+            <div className="flex justify-end border-t border-line pt-3">
+              <button
+                type="button"
+                onClick={() => setActiveTab(nextTab.id)}
+                className="flex items-center gap-1.5 font-mono text-[10px] uppercase tracking-[0.12em] text-ink-faint transition-colors hover:text-amber"
+              >
+                Next: {nextTab.label}
+                <ArrowRight className="h-3 w-3" />
+              </button>
+            </div>
+          )}
         </motion.div>
 
         <motion.div variants={riseItem}>

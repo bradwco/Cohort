@@ -3,7 +3,6 @@ import { motion } from 'motion/react';
 import { useState } from 'react';
 import type { OnboardingData } from '../../state/onboarding';
 import { saveOnboarding } from '../../state/onboarding';
-import { Button } from '../../shared_ui/button';
 import { cn } from '../../shared_ui/cn';
 import {
   isSupabaseConfigured,
@@ -21,7 +20,7 @@ type StepProps = {
   onComplete?: (provider?: OnboardingData['authProvider']) => void;
 };
 
-export function WelcomeStep({ onNext }: StepProps) {
+export function WelcomeStep({ }: StepProps) {
   return (
     <>
       <div className="flex max-w-xl flex-col gap-4">
@@ -39,9 +38,6 @@ export function WelcomeStep({ onNext }: StepProps) {
             </div>
           ))}
         </div>
-        <Button type="button" variant="amber" size="lg" onClick={onNext} className="w-fit">
-          Begin
-        </Button>
       </div>
     </>
   );
