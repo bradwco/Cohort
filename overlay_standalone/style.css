@@ -21,30 +21,37 @@ html, body {
   cursor: default;
 }
 
+/* ── Right column ───────────────────────────────────────────────────── */
 .column {
   position: absolute;
   top: 50%;
   right: 8px;
   transform: translateY(-50%);
-  width: 76px;
+  width: 60px;
   display: flex;
   flex-direction: column;
   align-items: center;
   gap: 14px;
-  padding: 18px 12px;
-  background: var(--bg);
+  padding: 8px 12px 18px;
+  background: rgba(8, 12, 28, 0.75);
   backdrop-filter: blur(16px);
   -webkit-backdrop-filter: blur(16px);
   border: 1px solid var(--border);
-  border-radius: 28px;
+  border-radius: 22px;
   box-sizing: border-box;
-  box-shadow: 0 0 12px 2px rgba(232, 168, 124, 0.28);
-  transition: box-shadow 0.28s ease;
 }
 
-.column:hover {
-  box-shadow: 0 0 32px 8px rgba(232, 168, 124, 0.62);
+.column-handle {
+  width: 100%;
+  display: flex;
+  justify-content: center;
+  padding: 2px 0 0;
+  color: rgba(180, 195, 255, 0.28);
+  cursor: ns-resize;
+  flex-shrink: 0;
+  transition: color 0.2s ease;
 }
+.column:hover .column-handle { color: rgba(180, 195, 255, 0.65); }
 
 .avatars {
   display: flex;
@@ -84,9 +91,9 @@ html, body {
   50%       { box-shadow: 0 0 18px 4px rgba(214, 110, 100, 0.70); }
 }
 
-.status-active { animation: breathe-active 3s ease-in-out infinite; }
-.status-idle   { animation: breathe-idle   4.5s ease-in-out infinite; }
-.status-off    { animation: breathe-off    2.5s ease-in-out infinite; }
+.status-active { animation: breathe-active 6s ease-in-out infinite; }
+.status-idle   { animation: breathe-idle   9s ease-in-out infinite; }
+.status-off    { animation: breathe-off    5s ease-in-out infinite; }
 
 /* Hover label — renders to the LEFT of the avatar */
 .name {
@@ -108,13 +115,21 @@ html, body {
 }
 .avatar:hover .name { opacity: 1; }
 
-/* ── Notch bar ─────────────────────────────────────────────────────── */
-.notch {
+/* ── Notch wrapper (draggable container) ────────────────────────────── */
+#notch-wrapper {
   position: absolute;
   top: 10px;
   left: 50%;
   transform: translateX(-50%);
   width: 480px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+/* ── Notch bar ─────────────────────────────────────────────────────── */
+.notch {
+  width: 100%;
   height: 24px;
   background: rgba(10, 12, 18, 0.92);
   border-radius: 20px;
@@ -127,14 +142,12 @@ html, body {
   cursor: text;
   box-shadow: 0 0 12px 2px rgba(232, 168, 124, 0.28);
   transition:
-    width     0.38s cubic-bezier(0.34, 1.15, 0.64, 1),
-    height    0.38s cubic-bezier(0.34, 1.15, 0.64, 1),
+    height     0.38s cubic-bezier(0.34, 1.15, 0.64, 1),
     box-shadow 0.28s ease;
 }
 
 .notch:hover,
 .notch:focus-within {
-  width: 500px;
   height: 42px;
   box-shadow: 0 0 32px 8px rgba(232, 168, 124, 0.62);
 }
@@ -158,20 +171,15 @@ html, body {
   border: none;
   outline: none;
   color: var(--text-soft);
-  font-size: 11px;
+  font-size: 13px;
   font-family: inherit;
   padding: 0;
   opacity: 0;
   pointer-events: none;
   transition: opacity 0.15s ease 0.18s;
 }
-
 .notch:hover .notch-input,
-.notch:focus-within .notch-input {
-  opacity: 1;
-  pointer-events: auto;
-}
-
+.notch:focus-within .notch-input { opacity: 1; pointer-events: auto; }
 .notch-input::placeholder { color: rgba(142, 134, 118, 0.55); }
 
 .notch-submit {
@@ -189,6 +197,97 @@ html, body {
 .notch-submit:hover { color: rgba(232, 168, 124, 0.90); }
 .notch:hover .notch-submit,
 .notch:focus-within .notch-submit { opacity: 1; }
+
+/* ── AI peek (minimized indicator) ─────────────────────────────────── */
+.ai-peek {
+  display: none;
+  align-self: center;
+  width: 100px;
+  height: 10px;
+  background: rgba(10, 12, 18, 0.92);
+  border-radius: 6px;
+  cursor: pointer;
+  transition: background 0.22s ease, width 0.22s ease, height 0.22s ease, border-radius 0.22s ease;
+}
+#notch-wrapper.minimized .ai-peek { display: block; }
+.ai-peek:hover {
+  background: rgba(232, 168, 124, 0.62);
+  width: 140px;
+  height: 14px;
+  border-radius: 10px;
+}
+
+/* ── AI output panel ────────────────────────────────────────────────── */
+.ai-output {
+  position: relative;
+  width: 100%;
+  max-height: 300px;
+  overflow-y: auto;
+  background: rgba(10, 13, 24, 0.90);
+  border-radius: 16px;
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  padding: 12px 16px;
+  box-sizing: border-box;
+  display: none;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 255, 255, 0.10) transparent;
+  user-select: text;
+  cursor: auto;
+}
+.ai-output.visible { display: block; }
+
+.ai-minimize {
+  position: absolute;
+  top: 10px;
+  right: 12px;
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  background: rgba(255, 255, 255, 0.05);
+  color: var(--text-soft);
+  border: 1px solid var(--border);
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: background 0.15s ease, color 0.15s ease;
+  user-select: none;
+}
+.ai-minimize:hover  { background: var(--hover); color: var(--accent); }
+.ai-minimize:active { background: rgba(255, 255, 255, 0.12); }
+
+.ai-message {
+  font-size: 12px;
+  line-height: 1.65;
+  margin-bottom: 12px;
+  word-wrap: break-word;
+}
+.ai-message:last-child { margin-bottom: 0; }
+
+.ai-message.user {
+  color: rgba(232, 168, 124, 0.75);
+  font-style: italic;
+  font-weight: 600;
+  font-size: 12px;
+  margin-bottom: 4px;
+}
+.ai-message.assistant { color: #ffffff; }
+.ai-message.error     { color: rgba(214, 110, 100, 0.80); }
+
+.ai-message.loading { opacity: 0.45; }
+
+.ai-message strong { color: #fff; font-weight: 600; }
+.ai-message em     { font-style: italic; }
+.ai-message code   {
+  font-family: "SF Mono", "Fira Code", monospace;
+  font-size: 11px;
+  background: rgba(255, 255, 255, 0.07);
+  padding: 1px 4px;
+  border-radius: 4px;
+}
 
 /* ── Divider ────────────────────────────────────────────────────────── */
 .divider {
