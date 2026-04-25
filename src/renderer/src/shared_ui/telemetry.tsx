@@ -60,35 +60,48 @@ export function Telemetry({ feed, feedRef, onClose }: Props) {
         ref={feedRef}
         className="scrollbar-thin flex flex-1 flex-col gap-2.5 overflow-y-auto px-4 py-3 font-mono"
       >
-        <AnimatePresence initial={false}>
-          {feed.map((evt, i) => (
-            <motion.div
-              key={`${evt.ts}-${i}`}
-              initial={{ opacity: 0, y: 8 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.3 }}
-              className="rounded border border-line bg-white/[0.02] px-3 py-2.5"
-            >
-              <div className="mb-1.5 flex items-center gap-2">
-                <span className="text-[10px] text-ink-faint">{evt.ts}</span>
-                <span
-                  className={cn(
-                    'rounded border px-1.5 py-px text-[8px] font-medium tracking-[0.12em]',
-                    evt.t === 'mqtt'
-                      ? 'border-amber/30 bg-amber/10 text-amber'
-                      : 'border-cool-blue/30 bg-cool-blue/10 text-cool-blue',
-                  )}
-                >
-                  {evt.t === 'mqtt' ? 'MQTT' : 'AGENT'}
-                </span>
+        {feed.length === 0 ? (
+          <div className="flex flex-1 items-center justify-center">
+            <div className="max-w-[240px] rounded border border-dashed border-line bg-white/[0.02] px-4 py-5 text-center">
+              <div className="font-mono text-[10px] uppercase tracking-[0.12em] text-ink-faint">
+                no telemetry yet
               </div>
-              <div className="mb-1 break-all text-[10px] text-ink">{evt.topic}</div>
-              <div className="break-all text-[9px] leading-relaxed text-ink-dim">
-                {evt.payload}
+              <div className="mt-2 text-[10px] leading-relaxed text-ink-dim">
+                Live MQTT and agent events will appear here once the real pipeline is connected.
               </div>
-            </motion.div>
-          ))}
-        </AnimatePresence>
+            </div>
+          </div>
+        ) : (
+          <AnimatePresence initial={false}>
+            {feed.map((evt, i) => (
+              <motion.div
+                key={`${evt.ts}-${i}`}
+                initial={{ opacity: 0, y: 8 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.3 }}
+                className="rounded border border-line bg-white/[0.02] px-3 py-2.5"
+              >
+                <div className="mb-1.5 flex items-center gap-2">
+                  <span className="text-[10px] text-ink-faint">{evt.ts}</span>
+                  <span
+                    className={cn(
+                      'rounded border px-1.5 py-px text-[8px] font-medium tracking-[0.12em]',
+                      evt.t === 'mqtt'
+                        ? 'border-amber/30 bg-amber/10 text-amber'
+                        : 'border-cool-blue/30 bg-cool-blue/10 text-cool-blue',
+                    )}
+                  >
+                    {evt.t === 'mqtt' ? 'MQTT' : 'AGENT'}
+                  </span>
+                </div>
+                <div className="mb-1 break-all text-[10px] text-ink">{evt.topic}</div>
+                <div className="break-all text-[9px] leading-relaxed text-ink-dim">
+                  {evt.payload}
+                </div>
+              </motion.div>
+            ))}
+          </AnimatePresence>
+        )}
       </div>
 
       <div className="flex flex-col gap-1.5 border-t border-line px-5 py-3.5">

@@ -5,6 +5,7 @@ import { Sidebar } from './shared_ui/sidebar';
 import { Header } from './shared_ui/header';
 import { Telemetry } from './shared_ui/telemetry';
 import { GrainOverlay } from './shared_ui/grain_overlay';
+import { HwSimulator } from './shared_ui/hw_simulator';
 import { useSimulatedTelemetry } from './shared_ui/use_simulated_telemetry';
 import type { ViewId } from './shared_ui/types';
 
@@ -45,6 +46,7 @@ export default function App() {
       }}
     >
       <GrainOverlay />
+      <HwSimulator />
 
       <Sidebar activeView={activeView} onSelect={setActiveView} />
 
