@@ -10,11 +10,6 @@ import { StepCard } from '../components/onboarding/step_card';
 import { AvatarBuilderStep } from '../components/onboarding/avatar_builder_step';
 import {
   AuthStep,
-  AuthVisual,
-  FocusPreferencesStep,
-  FocusVisual,
-  PreviewStep,
-  PreviewVisual,
   WelcomeStep,
   WelcomeVisual,
 } from '../components/onboarding/functional_steps';
@@ -34,20 +29,10 @@ const STEP_COPY: Record<OnboardingStepId, { headline: string; body: string; meta
     body: 'Your pixel avatar becomes the tiny visible proof that you are here and locked in.',
     meta: ['hair', 'eyes', 'outfit', 'accessory', 'background'],
   },
-  focus: {
-    headline: 'Choose your focus defaults.',
-    body: 'These are the rules Cohort uses when you start a session. You can change them later.',
-    meta: ['25 / 50 / 90', 'gentle / standard / strict', 'presence toggles'],
-  },
-  preview: {
-    headline: 'Meet your dashboard.',
-    body: 'Here is how your avatar and focus settings come together inside the app.',
-    meta: ['timer', 'streak badge', 'orb glow'],
-  },
   auth: {
-    headline: 'Save your setup.',
-    body: 'Create an account with Google or an email link to enter the app with these choices.',
-    meta: ['google', 'email link'],
+    headline: 'Sign in.',
+    body: 'Create an account or sign in to save your setup and join your cohort.',
+    meta: ['google', 'email'],
   },
 };
 
@@ -89,17 +74,9 @@ export function OnboardingPage({ onAuthenticated }: Props) {
         children: <WelcomeStep data={onboarding.data} update={onboarding.update} onNext={next} />,
         visual: <WelcomeVisual />,
       },
-      focus: {
-        children: <FocusPreferencesStep data={onboarding.data} update={onboarding.update} />,
-        visual: <FocusVisual data={onboarding.data} />,
-      },
-      preview: {
-        children: <PreviewStep data={onboarding.data} update={onboarding.update} />,
-        visual: <PreviewVisual data={onboarding.data} />,
-      },
       auth: {
         children: <AuthStep data={onboarding.data} update={onboarding.update} onComplete={complete} />,
-        visual: <AuthVisual data={onboarding.data} />,
+        visual: null,
       },
     }[step.id];
 

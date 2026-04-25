@@ -1,6 +1,6 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { motion } from "motion/react";
-import { Shuffle, Sparkles } from "lucide-react";
+import { Shuffle } from "lucide-react";
 import type { AvatarTraits, OnboardingData } from "../../state/onboarding";
 import { Button } from "../../shared_ui/button";
 import { cn, hexA } from "../../shared_ui/cn";
@@ -112,11 +112,6 @@ export function AvatarBuilderStep({ data, update, direction }: Props) {
   const username = data.username || makeUsername(data.displayName);
   const backdrop =
     getAvatarOption("background", data.avatar.background)?.color ?? "#E8A87C";
-
-  const previewLine = useMemo(() => {
-    const length = data.sessionLength;
-    return `${length}m sessions / ${data.accountability} accountability`;
-  }, [data.accountability, data.sessionLength]);
 
   const setAvatarTrait = (trait: AvatarTraitKey, value: string) => {
     update({ avatar: { ...data.avatar, [trait]: value } });
@@ -317,21 +312,6 @@ export function AvatarBuilderStep({ data, update, direction }: Props) {
           variants={riseItem}
           className="rounded-lg border border-line bg-bg-deeper/45 p-4"
         >
-          <div className="mb-3 flex items-center justify-between gap-4">
-            <div>
-              <div className="font-mono text-[10px] uppercase tracking-[0.18em] text-ink-faint">
-                avatar builder
-              </div>
-              <div className="mt-1 font-serif text-xl italic text-ink">
-                {displayName}'s focus presence
-              </div>
-            </div>
-            <div className="flex items-center gap-2 rounded border border-line bg-white/[0.02] px-2.5 py-1.5 font-mono text-[10px] uppercase tracking-[0.12em] text-ink-faint">
-              <Sparkles className="h-3.5 w-3.5 text-amber" />
-              {previewLine}
-            </div>
-          </div>
-
           <div className="grid grid-cols-6 gap-1.5">
             {AVATAR_TABS.map((tab) => (
               <motion.button

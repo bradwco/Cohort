@@ -256,24 +256,7 @@ export async function checkUsernameAvailable(username: string): Promise<boolean>
   return !data || data.length === 0;
 }
 
-export async function sendEmailMagicLink(email: string, data: OnboardingData) {
-  assertConfigured();
-  window.localStorage.setItem(PENDING_PROVIDER_KEY, 'email');
-  window.localStorage.setItem(PENDING_PROFILE_KEY, JSON.stringify(profileMetadata(data)));
-
-  const { error } = await supabase!.auth.signInWithOtp({
-    email,
-    options: {
-      data: profileMetadata(data),
-      emailRedirectTo: getRedirectUrl(data),
-      shouldCreateUser: true,
-    },
-  });
-
-  if (error) throw new Error(error.message);
-}
-
-export async function startGoogleAuth(data: OnboardingData) {
+export async function startGoogleAuth(data: OnboardingData): Promise<AuthSession> {
   assertConfigured();
   window.localStorage.setItem(PENDING_PROVIDER_KEY, 'google');
   window.localStorage.setItem(PENDING_PROFILE_KEY, JSON.stringify(profileMetadata(data)));
@@ -293,7 +276,40 @@ export async function startGoogleAuth(data: OnboardingData) {
   if (error) throw new Error(error.message);
   if (!oauth.url) throw new Error('Supabase did not return a Google auth URL.');
 
-  window.location.href = oauth.url;
+  // Open auth in an Electron popup window; wait for the cohort:// callback
+  const callbackUrl = await window.api.openGoogleAuthPopup(oauth.url, 'cohort://');
+  const session = await completeDeepLinkAuth(callbackUrl);
+  if (!session) throw new Error('Google authentication failed.');
+  return session;
+}
+
+export async function signUpWithEmailPassword(
+  email: string,
+  password: string,
+  profile: OnboardingData,
+): Promise<AuthSession> {
+  assertConfigured();
+  const { data, error } = await supabase!.auth.signUp({
+    email,
+    password,
+    options: { data: profileMetadata(profile) },
+  });
+  if (error) throw new Error(error.message);
+  if (!data.session) throw new Error('Check your email to confirm your account before signing in.');
+  const session = saveSupabaseSession(data.session, profile);
+  await persistSignedInUserProfile(mergeProfilePartial(session.profile ?? {}, session), session);
+  return session;
+}
+
+export async function signInWithEmailPassword(
+  email: string,
+  password: string,
+): Promise<AuthSession> {
+  assertConfigured();
+  const { data, error } = await supabase!.auth.signInWithPassword({ email, password });
+  if (error) throw new Error(error.message);
+  if (!data.session) throw new Error('Sign in failed.');
+  return saveSupabaseSession(data.session);
 }
 
 // In Electron the app handles cohort:// deep links so auth redirects

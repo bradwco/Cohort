@@ -1,4 +1,4 @@
-import { ipcMain } from 'electron';
+import { ipcMain, BrowserWindow } from 'electron';
 import { CH } from './channels';
 import {
   getProfile,
@@ -89,4 +89,38 @@ export function registerIpcHandlers(): void {
   ipcMain.handle(CH.HW_SIMULATE, (_e, userId: string, payload: Record<string, unknown>) =>
     simulateHardwareEvent(userId, payload),
   );
+
+  // --- Google auth popup ---
+  ipcMain.handle(CH.AUTH_GOOGLE_POPUP, (_e, oauthUrl: string, redirectScheme: string) => {
+    return new Promise<string>((resolve, reject) => {
+      const popup = new BrowserWindow({
+        width: 520,
+        height: 680,
+        autoHideMenuBar: true,
+        backgroundColor: '#08090f',
+        webPreferences: {
+          nodeIntegration: false,
+          contextIsolation: true,
+        },
+      });
+
+      let resolved = false;
+
+      const handleNav = (_event: Electron.Event, url: string) => {
+        if (url.startsWith(redirectScheme)) {
+          resolved = true;
+          popup.destroy();
+          resolve(url);
+        }
+      };
+
+      popup.webContents.on('will-redirect', handleNav);
+      popup.webContents.on('will-navigate', handleNav);
+      popup.on('closed', () => {
+        if (!resolved) reject(new Error('Auth window closed.'));
+      });
+
+      popup.loadURL(oauthUrl);
+    });
+  });
 }

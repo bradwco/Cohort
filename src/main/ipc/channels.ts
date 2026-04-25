@@ -20,6 +20,9 @@ export const CH = {
   ACTIVITY_LOG: 'supabase:activity-log',
   ACTIVITY_LOGS_GET: 'supabase:activity-logs-get',
 
+  // Auth
+  AUTH_GOOGLE_POPUP: 'auth:google-popup',
+
   // Hardware simulator (dev only)
   HW_SIMULATE: 'hw:simulate',
 
