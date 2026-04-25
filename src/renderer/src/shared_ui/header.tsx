@@ -1,10 +1,11 @@
 import type { ViewId } from './types';
 
 const TITLES: Record<ViewId, { t: string; s: string }> = {
-  network: { t: 'live network', s: 'who is locked in right now' },
-  history: { t: 'gemma debriefs', s: 'sessions, scored & summarized' },
-  graveyard: { t: 'the graveyard', s: "sessions that didn't survive" },
-  hardware: { t: 'hardware', s: 'program the physical rules' },
+  dashboard: { t: 'dashboard', s: 'your focus presence at a glance' },
+  history: { t: 'session history', s: 'sessions, scored & summarized' },
+  friends: { t: 'friends', s: 'your cohort network' },
+  orb: { t: 'orb', s: 'customize your focus signal' },
+  settings: { t: 'settings', s: 'account and preferences' },
 };
 
 type Props = {
@@ -12,16 +13,9 @@ type Props = {
   sessionActive: boolean;
   telemetryOpen: boolean;
   onToggleTelemetry: () => void;
-  onSignOut?: () => void;
 };
 
-export function Header({
-  view,
-  sessionActive,
-  telemetryOpen,
-  onToggleTelemetry,
-  onSignOut,
-}: Props) {
+export function Header({ view, sessionActive, telemetryOpen, onToggleTelemetry }: Props) {
   const meta = TITLES[view];
   return (
     <div className="mb-8 flex items-start justify-between gap-5 border-b border-line px-10 pb-7 pt-8">
@@ -49,19 +43,7 @@ export function Header({
           <span className="font-mono text-[11px] tracking-[0.1em]">
             {telemetryOpen ? 'HIDE' : 'SHOW'} TELEMETRY
           </span>
-          <kbd className="rounded border border-line bg-white/[0.04] px-1.5 py-0.5 font-mono text-[9px] text-ink-faint">
-            Cmd T
-          </kbd>
         </button>
-        {onSignOut && (
-          <button
-            type="button"
-            onClick={onSignOut}
-            className="rounded border border-line-mid bg-transparent px-3 py-1.5 font-mono text-[11px] uppercase tracking-[0.1em] text-ink-faint transition-colors hover:border-amber/35 hover:bg-amber/[0.06] hover:text-amber"
-          >
-            Sign Out
-          </button>
-        )}
       </div>
     </div>
   );

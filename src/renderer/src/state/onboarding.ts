@@ -46,6 +46,7 @@ export type OnboardingData = {
     silentPresence: boolean;
     friendNudges: boolean;
     groupSessions: boolean;
+    autoStartOnDock: boolean;
   };
   email: string;
   authProvider: 'google' | 'email' | 'demo' | null;
@@ -72,6 +73,7 @@ export const DEFAULT_ONBOARDING: OnboardingData = {
     silentPresence: true,
     friendNudges: true,
     groupSessions: true,
+    autoStartOnDock: false,
   },
   email: '',
   authProvider: null,
