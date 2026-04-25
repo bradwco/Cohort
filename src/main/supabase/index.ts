@@ -37,19 +37,19 @@ export interface ActivityLog {
   logged_at: string;
 }
 
-// Profiles
-
 export async function getProfile(userId: string): Promise<Profile | null> {
-  const { data, error } = await getSupabaseClient()
-    .from('profiles')
-    .select('*')
-    .eq('id', userId)
-    .single();
-  if (error) { console.error('getProfile:', error.message); return null; }
+  const { data, error } = await getSupabaseClient().from('profiles').select('*').eq('id', userId).single();
+  if (error) {
+    console.error('getProfile:', error.message);
+    return null;
+  }
   return data as Profile;
 }
 
-export async function updateProfile(userId: string, updates: Partial<Pick<Profile, 'hardware_status' | 'current_activity' | 'orb_color' | 'last_ping'>>): Promise<void> {
+export async function updateProfile(
+  userId: string,
+  updates: Partial<Pick<Profile, 'hardware_status' | 'current_activity' | 'orb_color' | 'last_ping'>>,
+): Promise<void> {
   const { error } = await getSupabaseClient()
     .from('profiles')
     .update({ ...updates, last_ping: new Date().toISOString() })
@@ -57,13 +57,11 @@ export async function updateProfile(userId: string, updates: Partial<Pick<Profil
   if (error) console.error('updateProfile:', error.message);
 }
 
-// Friends
-
 export async function searchProfileByUsername(username: string): Promise<Profile | null> {
   const { data, error } = await getSupabaseClient()
     .from('profiles')
     .select('*')
-    .eq('username', username)
+    .ilike('username', username)
     .single();
   if (error || !data) return null;
   return data as Profile;
@@ -71,10 +69,21 @@ export async function searchProfileByUsername(username: string): Promise<Profile
 
 export async function addFriend(userId: string, friendId: string): Promise<boolean> {
   if (userId === friendId) return false;
+
   const { error } = await getSupabaseClient()
     .from('friendships')
-    .upsert({ user_id: userId, friend_id: friendId, status: 'accepted' }, { onConflict: 'user_id,friend_id' });
-  if (error) { console.error('addFriend:', error.message); return false; }
+    .upsert(
+      [
+        { user_id: userId, friend_id: friendId, status: 'accepted' },
+        { user_id: friendId, friend_id: userId, status: 'accepted' },
+      ],
+      { onConflict: 'user_id,friend_id' },
+    );
+
+  if (error) {
+    console.error('addFriend:', error.message);
+    return false;
+  }
   return true;
 }
 
@@ -82,23 +91,34 @@ export async function getFriendsWithProfiles(userId: string): Promise<Profile[]>
   const db = getSupabaseClient();
   const { data: friendships, error } = await db
     .from('friendships')
-    .select('friend_id')
-    .eq('user_id', userId)
+    .select('user_id, friend_id')
     .eq('status', 'accepted');
-  if (error || !friendships) { console.error('getFriends:', error?.message); return []; }
 
-  const friendIds = friendships.map((f: { friend_id: string }) => f.friend_id);
+  if (error || !friendships) {
+    console.error('getFriends:', error?.message);
+    return [];
+  }
+
+  const friendIds = Array.from(
+    new Set(
+      friendships.flatMap((friendship: { user_id: string; friend_id: string }) => {
+        if (friendship.user_id === userId) return [friendship.friend_id];
+        if (friendship.friend_id === userId) return [friendship.user_id];
+        return [];
+      }),
+    ),
+  );
+
   if (friendIds.length === 0) return [];
 
-  const { data: profiles, error: pe } = await db
-    .from('profiles')
-    .select('*')
-    .in('id', friendIds);
-  if (pe) { console.error('getFriendProfiles:', pe.message); return []; }
+  const { data: profiles, error: profileError } = await db.from('profiles').select('*').in('id', friendIds);
+  if (profileError) {
+    console.error('getFriendProfiles:', profileError.message);
+    return [];
+  }
+
   return (profiles ?? []) as Profile[];
 }
-
-// Sessions
 
 export async function startSession(
   userId: string,
@@ -116,7 +136,11 @@ export async function startSession(
     })
     .select()
     .single();
-  if (error) { console.error('startSession:', error.message); return null; }
+
+  if (error) {
+    console.error('startSession:', error.message);
+    return null;
+  }
   return data as Session;
 }
 
@@ -145,11 +169,12 @@ export async function getSessionHistory(userId: string): Promise<Session[]> {
     .eq('user_id', userId)
     .order('started_at', { ascending: false })
     .limit(50);
-  if (error) { console.error('getSessionHistory:', error.message); return []; }
+  if (error) {
+    console.error('getSessionHistory:', error.message);
+    return [];
+  }
   return (data ?? []) as Session[];
 }
-
-// Activity logs
 
 export async function logActivity(
   sessionId: string,
@@ -157,15 +182,13 @@ export async function logActivity(
   eventType: ActivityLog['event_type'],
   eventDetail: Record<string, unknown>,
 ): Promise<void> {
-  const { error } = await getSupabaseClient()
-    .from('activity_logs')
-    .insert({
-      session_id: sessionId,
-      user_id: userId,
-      event_type: eventType,
-      event_detail: eventDetail,
-      logged_at: new Date().toISOString(),
-    });
+  const { error } = await getSupabaseClient().from('activity_logs').insert({
+    session_id: sessionId,
+    user_id: userId,
+    event_type: eventType,
+    event_detail: eventDetail,
+    logged_at: new Date().toISOString(),
+  });
   if (error) console.error('logActivity:', error.message);
 }
 
@@ -175,6 +198,9 @@ export async function getSessionActivityLogs(sessionId: string): Promise<Activit
     .select('*')
     .eq('session_id', sessionId)
     .order('logged_at', { ascending: true });
-  if (error) { console.error('getActivityLogs:', error.message); return []; }
+  if (error) {
+    console.error('getActivityLogs:', error.message);
+    return [];
+  }
   return (data ?? []) as ActivityLog[];
 }

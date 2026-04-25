@@ -1,5 +1,7 @@
 import { ipcMain, shell } from 'electron';
 import { CH } from './channels';
+import { BrowserWindow, ipcMain } from 'electron';
+import { CH, PUSH } from './channels';
 import {
   getProfile,
   updateProfile,
@@ -25,19 +27,25 @@ import {
 export function registerIpcHandlers(): void {
   ipcMain.handle(CH.PING, () => 'pong');
 
-  // --- Profiles ---
+  // Profiles
   ipcMain.handle(CH.PROFILE_GET, (_e, userId: string) => getProfile(userId));
-
-  ipcMain.handle(CH.PROFILE_UPDATE, (_e, userId: string, updates: Parameters<typeof updateProfile>[1]) =>
-    updateProfile(userId, updates),
+  ipcMain.handle(
+    CH.PROFILE_UPDATE,
+    (_e, userId: string, updates: Parameters<typeof updateProfile>[1]) => updateProfile(userId, updates),
   );
 
-  // --- Friends ---
+  // Friends
   ipcMain.handle(CH.FRIENDS_LIST, (_e, userId: string) => getFriendsWithProfiles(userId));
   ipcMain.handle(CH.PROFILE_SEARCH, (_e, username: string) => searchProfileByUsername(username));
   ipcMain.handle(CH.FRIEND_ADD, (_e, userId: string, friendId: string) => addFriend(userId, friendId));
+  ipcMain.handle(CH.FRIEND_NUDGE_SEND, (_e, fromUserId: string, toUserId: string, fromName: string) => {
+    const payload = { fromUserId, toUserId, fromName, sentAt: new Date().toISOString() };
+    for (const win of BrowserWindow.getAllWindows()) {
+      win.webContents.send(PUSH.FRIEND_NUDGE, payload);
+    }
+  });
 
-  // --- Sessions ---
+  // Sessions
   ipcMain.handle(
     CH.SESSION_START,
     async (_e, userId: string, workflowGroup: string, durationMins: number) => {
@@ -46,46 +54,40 @@ export function registerIpcHandlers(): void {
       return session;
     },
   );
-
-  ipcMain.handle(
-    CH.SESSION_END,
-    async (_e, pauseMinutes: number, flowScore: number, aiSummary: string) => {
-      const sessionId = getActiveSessionId();
-      if (!sessionId) return;
-      await endSession(sessionId, pauseMinutes, flowScore, aiSummary);
-      setActiveSessionId(null);
-    },
-  );
-
+  ipcMain.handle(CH.SESSION_END, async (_e, pauseMinutes: number, flowScore: number, aiSummary: string) => {
+    const sessionId = getActiveSessionId();
+    if (!sessionId) return;
+    await endSession(sessionId, pauseMinutes, flowScore, aiSummary);
+    setActiveSessionId(null);
+  });
   ipcMain.handle(CH.SESSION_HISTORY, (_e, userId: string) => getSessionHistory(userId));
 
-  // --- Activity logs ---
+  // Activity logs
   ipcMain.handle(
     CH.ACTIVITY_LOG,
-    (_e, sessionId: string, userId: string, eventType: Parameters<typeof logActivity>[2], eventDetail: Record<string, unknown>) =>
-      logActivity(sessionId, userId, eventType, eventDetail),
+    (
+      _e,
+      sessionId: string,
+      userId: string,
+      eventType: Parameters<typeof logActivity>[2],
+      eventDetail: Record<string, unknown>,
+    ) => logActivity(sessionId, userId, eventType, eventDetail),
   );
+  ipcMain.handle(CH.ACTIVITY_LOGS_GET, (_e, sessionId: string) => getSessionActivityLogs(sessionId));
 
-  ipcMain.handle(CH.ACTIVITY_LOGS_GET, (_e, sessionId: string) =>
-    getSessionActivityLogs(sessionId),
-  );
-
-  // --- MQTT ---
+  // MQTT
   ipcMain.handle(CH.MQTT_INIT, (_e, userId: string) => {
     initMqtt(userId);
   });
-
   ipcMain.handle(CH.MQTT_PUBLISH_COMMAND, (_e, userId: string, command: Record<string, unknown>) => {
     publishCommand(userId, command);
   });
-
   ipcMain.handle(CH.MQTT_SUBSCRIBE_FRIENDS, (_e, friendIds: string[]) => {
     subscribeFriends(friendIds);
   });
-
   ipcMain.handle(CH.MQTT_PAUSE_STATS, () => getPauseStats());
 
-  // --- Hardware simulator ---
+  // Hardware simulator
   ipcMain.handle(CH.HW_SIMULATE, (_e, userId: string, payload: Record<string, unknown>) =>
     simulateHardwareEvent(userId, payload),
   );

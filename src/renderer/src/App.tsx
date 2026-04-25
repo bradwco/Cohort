@@ -34,6 +34,8 @@ type OwnStatePayload = {
   workflowGroup?: string;
   totalPauseMs?: number;
   sessionId?: string;
+  sessionStartedAt?: string;
+  plannedDurationMinutes?: number;
 };
 
 function getInitialAppState(): {
@@ -88,6 +90,11 @@ function DashboardApp({
   const sessionActive = orbStatus !== 'offline';
 
   useEffect(() => {
+    if (!userId || !window.api) return;
+    void window.api.initMqtt(userId);
+  }, [userId]);
+
+  useEffect(() => {
     if (orbStatus !== 'docked') return;
     const id = setInterval(() => setSecondsLeft((s) => Math.max(0, s - 1)), 1000);
     return () => clearInterval(id);
@@ -128,6 +135,8 @@ function DashboardApp({
       } else if (data.status === 'undocked') {
         setOrbStatus('undocked');
         setLiftCount((c) => c + 1);
+      } else if (data.status === 'offline') {
+        handleSessionEnd();
       }
     });
     return () => { cleanup(); };
@@ -156,6 +165,7 @@ function DashboardApp({
     >
       <GrainOverlay />
       <HwSimulator
+        userId={userId}
         activeGroup={activeGroup}
         groups={groups}
         initialDuration={profile.sessionLength}
