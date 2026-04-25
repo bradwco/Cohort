@@ -130,6 +130,72 @@
         }
       })();
 
+      // ── Friend avatars (poll every 30s) ────────────────────────────────
+      const friendAvatarMap = {};
+
+      async function syncFriendAvatars() {
+        try {
+          const cfg = await window.electronAPI.getConfig();
+          if (!cfg.SUPABASE_URL || !cfg.SUPABASE_ANON_KEY || !cfg.USER_ID) return;
+
+          const url     = cfg.SUPABASE_URL.replace(/\/$/, '');
+          const headers = {
+            'apikey':        cfg.SUPABASE_ANON_KEY,
+            'Authorization': `Bearer ${cfg.SUPABASE_ANON_KEY}`,
+          };
+
+          const fResp = await fetch(
+            `${url}/rest/v1/friendships?user_id=eq.${cfg.USER_ID}&select=friend_ids`,
+            { headers },
+          );
+          const [fRow] = await fResp.json();
+          const friendIds = fRow?.friend_ids ?? [];
+          if (friendIds.length === 0) return;
+
+          const pResp = await fetch(
+            `${url}/rest/v1/profiles?id=in.(${friendIds.join(',')})&select=*`,
+            { headers },
+          );
+          const profiles = await pResp.json();
+
+          const avatarsEl = document.getElementById('avatars');
+          const seenIds = new Set();
+
+          for (const p of profiles) {
+            seenIds.add(p.id);
+            const isDocked = p.hardware_status === 'docked';
+            const existing = friendAvatarMap[p.id];
+
+            if (isDocked && !existing && p.avatar) {
+              const div = document.createElement('div');
+              div.className = 'avatar status-active';
+              div.style.cssText = 'background:transparent;';
+              div.innerHTML = window.renderPixelAvatar(p.avatar)
+                + `<span class="name">${p.username ?? '?'}</span>`;
+              avatarsEl.appendChild(div);
+              friendAvatarMap[p.id] = div;
+              console.log('[friends] appeared:', p.username);
+            } else if (!isDocked && existing) {
+              existing.remove();
+              delete friendAvatarMap[p.id];
+              console.log('[friends] disappeared:', p.username);
+            }
+          }
+
+          for (const id of Object.keys(friendAvatarMap)) {
+            if (!seenIds.has(id)) {
+              friendAvatarMap[id].remove();
+              delete friendAvatarMap[id];
+            }
+          }
+        } catch (e) {
+          console.warn('[friends] sync error:', e.message);
+        }
+      }
+
+      syncFriendAvatars();
+      setInterval(syncFriendAvatars, 30_000);
+
       document.getElementById('stop').addEventListener('click', async () => {
         try {
           if (sessionId) {

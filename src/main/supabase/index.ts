@@ -23,10 +23,8 @@ export interface Session {
 }
 
 export interface Friendship {
-  id: string;
   user_id: string;
-  friend_id: string;
-  status: 'accepted' | 'pending';
+  friend_ids: string[];
 }
 
 export interface ActivityLog {
@@ -70,17 +68,10 @@ export async function searchProfileByUsername(username: string): Promise<Profile
 
 export async function addFriend(userId: string, friendId: string): Promise<boolean> {
   if (userId === friendId) return false;
-
-  const { error } = await getSupabaseClient()
-    .from('friendships')
-    .upsert(
-      [
-        { user_id: userId, friend_id: friendId, status: 'accepted' },
-        { user_id: friendId, friend_id: userId, status: 'accepted' },
-      ],
-      { onConflict: 'user_id,friend_id' },
-    );
-
+  const { error } = await getSupabaseClient().rpc('add_friend_bidirectional', {
+    p_user_id: userId,
+    p_friend_id: friendId,
+  });
   if (error) {
     console.error('addFriend:', error.message);
     return false;
@@ -90,26 +81,14 @@ export async function addFriend(userId: string, friendId: string): Promise<boole
 
 export async function getFriendsWithProfiles(userId: string): Promise<Profile[]> {
   const db = getSupabaseClient();
-  const { data: friendships, error } = await db
+  const { data, error } = await db
     .from('friendships')
-    .select('user_id, friend_id')
-    .eq('status', 'accepted');
+    .select('friend_ids')
+    .eq('user_id', userId)
+    .single();
 
-  if (error || !friendships) {
-    console.error('getFriends:', error?.message);
-    return [];
-  }
-
-  const friendIds = Array.from(
-    new Set(
-      friendships.flatMap((friendship: { user_id: string; friend_id: string }) => {
-        if (friendship.user_id === userId) return [friendship.friend_id];
-        if (friendship.friend_id === userId) return [friendship.user_id];
-        return [];
-      }),
-    ),
-  );
-
+  if (error || !data) return [];
+  const friendIds: string[] = (data as Friendship).friend_ids ?? [];
   if (friendIds.length === 0) return [];
 
   const { data: profiles, error: profileError } = await db.from('profiles').select('*').in('id', friendIds);
@@ -117,7 +96,6 @@ export async function getFriendsWithProfiles(userId: string): Promise<Profile[]>
     console.error('getFriendProfiles:', profileError.message);
     return [];
   }
-
   return (profiles ?? []) as Profile[];
 }
 
