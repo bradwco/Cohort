@@ -6,22 +6,42 @@
     <link rel="stylesheet" href="style.css" />
   </head>
   <body>
-    <div class="notch" id="notch">
-      <div class="notch-handle" id="notch-handle" title="Drag to move">
-        <svg width="10" height="10" viewBox="0 0 10 10" fill="currentColor" aria-hidden="true">
-          <circle cx="2" cy="2" r="1.5"/><circle cx="8" cy="2" r="1.5"/>
-          <circle cx="2" cy="8" r="1.5"/><circle cx="8" cy="8" r="1.5"/>
-        </svg>
+    <!-- Notch + AI output, draggable together -->
+    <div id="notch-wrapper">
+      <div class="notch" id="notch">
+        <div class="notch-handle" id="notch-handle" title="Drag to move">
+          <svg width="10" height="10" viewBox="0 0 10 10" fill="currentColor" aria-hidden="true">
+            <circle cx="2" cy="2" r="1.5"/><circle cx="8" cy="2" r="1.5"/>
+            <circle cx="2" cy="8" r="1.5"/><circle cx="8" cy="8" r="1.5"/>
+          </svg>
+        </div>
+        <input class="notch-input" id="notch-input" type="text" placeholder="Ask me anything…" />
+        <button class="notch-submit" id="notch-submit" aria-label="Submit">
+          <svg width="14" height="11" viewBox="0 0 14 11" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M13 1v5a2 2 0 0 1-2 2H1m0 0 3-3M1 8l3 3"/>
+          </svg>
+        </button>
       </div>
-      <input class="notch-input" id="notch-input" type="text" placeholder="Ask me anything…" />
-      <button class="notch-submit" aria-label="Submit">
-        <svg width="14" height="11" viewBox="0 0 14 11" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-          <path d="M13 1v5a2 2 0 0 1-2 2H1m0 0 3-3M1 8l3 3"/>
-        </svg>
-      </button>
+      <div class="ai-peek" id="ai-peek" title="Show conversation"></div>
+      <div class="ai-output" id="ai-output">
+        <button class="ai-minimize" id="ai-minimize" title="Minimize">
+          <svg width="10" height="10" viewBox="0 0 10 10" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M6.5 1H9V3.5M9 1L5.5 4.5"/>
+            <path d="M3.5 9H1V6.5M1 9L4.5 5.5"/>
+          </svg>
+        </button>
+        <div id="ai-messages"></div>
+      </div>
     </div>
 
-    <div class="column">
+    <!-- Right column -->
+    <div class="column" id="column">
+      <div class="column-handle" id="column-handle" title="Drag to move">
+        <svg width="16" height="10" viewBox="0 0 16 10" fill="currentColor" aria-hidden="true">
+          <circle cx="2"  cy="2" r="1.5"/><circle cx="8"  cy="2" r="1.5"/><circle cx="14" cy="2" r="1.5"/>
+          <circle cx="2"  cy="8" r="1.5"/><circle cx="8"  cy="8" r="1.5"/><circle cx="14" cy="8" r="1.5"/>
+        </svg>
+      </div>
       <div class="avatars">
         <div class="avatar status-active" style="--c: #c19a7a;">A<span class="name">Alex Chen</span></div>
         <div class="avatar status-idle"   style="--c: #9a8770;">M<span class="name">Maya Rodriguez</span></div>
@@ -29,11 +49,8 @@
         <div class="avatar status-off"    style="--c: #b08568;">S<span class="name">Sam Taylor</span></div>
         <div class="avatar status-active" style="--c: #7d8278;">R<span class="name">Riley Singh</span></div>
       </div>
-
       <div class="divider"></div>
-
       <div class="timer" id="timer">25:00</div>
-
       <button class="stop" id="stop" aria-label="Stop session" title="Stop">
         <svg width="10" height="10" viewBox="0 0 10 10" fill="currentColor" aria-hidden="true">
           <rect x="0" y="0" width="10" height="10" rx="1.5" />
@@ -41,51 +58,149 @@
       </button>
     </div>
 
+    <script src="ai/gemini.js"></script>
     <script>
+      // ── Timer ──────────────────────────────────────────────────────────
       let secs = 25 * 60;
       const timerEl = document.getElementById('timer');
       const tick = setInterval(() => {
         secs = Math.max(0, secs - 1);
-        const m = String(Math.floor(secs / 60)).padStart(2, '0');
-        const s = String(secs % 60).padStart(2, '0');
-        timerEl.textContent = m + ':' + s;
+        timerEl.textContent =
+          String(Math.floor(secs / 60)).padStart(2, '0') + ':' +
+          String(secs % 60).padStart(2, '0');
         if (secs === 0) clearInterval(tick);
       }, 1000);
 
-      document.getElementById('stop').addEventListener('click', () => {
-        window.close();
-      });
+      document.getElementById('stop').addEventListener('click', () => window.close());
 
-      // Drag handle
-      const notch = document.getElementById('notch');
-      const handle = document.getElementById('notch-handle');
-      let dragging = false;
-      let dragOffsetX = 0;
-      let dragOffsetY = 0;
+      // ── Notch drag (X + Y) ─────────────────────────────────────────────
+      const wrapper    = document.getElementById('notch-wrapper');
+      const notchHandle = document.getElementById('notch-handle');
+      let notchDragging = false, notchOffX = 0, notchOffY = 0;
 
-      handle.addEventListener('mousedown', (e) => {
-        const rect = notch.getBoundingClientRect();
-        notch.style.transform = 'none';
-        notch.style.left = rect.left + 'px';
-        notch.style.top  = rect.top  + 'px';
-        dragging = true;
-        dragOffsetX = e.clientX - rect.left;
-        dragOffsetY = e.clientY - rect.top;
+      notchHandle.addEventListener('mousedown', (e) => {
+        const r = wrapper.getBoundingClientRect();
+        wrapper.style.transform = 'none';
+        wrapper.style.left = r.left + 'px';
+        wrapper.style.top  = r.top  + 'px';
+        notchDragging = true;
+        notchOffX = e.clientX - r.left;
+        notchOffY = e.clientY - r.top;
         window.electronAPI.setIgnoreMouseEvents(false);
         e.preventDefault();
       });
 
-      document.addEventListener('mouseup', () => { dragging = false; });
+      // ── Column drag (Y only) ───────────────────────────────────────────
+      const column      = document.getElementById('column');
+      const colHandle   = document.getElementById('column-handle');
+      let colDragging = false, colOffY = 0;
+
+      colHandle.addEventListener('mousedown', (e) => {
+        const r = column.getBoundingClientRect();
+        column.style.transform = 'none';
+        column.style.top = r.top + 'px';
+        colDragging = true;
+        colOffY = e.clientY - r.top;
+        window.electronAPI.setIgnoreMouseEvents(false);
+        e.preventDefault();
+      });
+
+      document.addEventListener('mouseup', () => {
+        notchDragging = false;
+        colDragging   = false;
+      });
 
       document.addEventListener('mousemove', (e) => {
-        if (dragging) {
-          notch.style.left = (e.clientX - dragOffsetX) + 'px';
-          notch.style.top  = (e.clientY - dragOffsetY) + 'px';
+        if (notchDragging) {
+          wrapper.style.left = (e.clientX - notchOffX) + 'px';
+          wrapper.style.top  = (e.clientY - notchOffY) + 'px';
+          return;
+        }
+        if (colDragging) {
+          column.style.top = (e.clientY - colOffY) + 'px';
           return;
         }
         const el = document.elementFromPoint(e.clientX, e.clientY);
-        const overUI = el && el.closest('.column, .notch');
+        const overUI = el && el.closest('#notch-wrapper, .column');
         window.electronAPI.setIgnoreMouseEvents(!overUI);
+      });
+
+      // ── Gemini AI ──────────────────────────────────────────────────────
+      let gemini = null;
+      const outputEl   = document.getElementById('ai-output');
+      const messagesEl = document.getElementById('ai-messages');
+
+      async function ensureGemini() {
+        if (gemini) return;
+        const cfg = await window.electronAPI.getConfig();
+        gemini = new GeminiClient(cfg.GEMINI_API_KEY);
+      }
+
+      function renderMarkdown(raw) {
+        return raw
+          .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+          .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
+          .replace(/\*(.*?)\*/g,     '<em>$1</em>')
+          .replace(/`([^`]+)`/g,     '<code>$1</code>')
+          .replace(/\n/g,            '<br>');
+      }
+
+      const peekEl = document.getElementById('ai-peek');
+
+      function addMessage(role, html, classList = []) {
+        const div = document.createElement('div');
+        div.className = ['ai-message', role, ...classList].join(' ');
+        div.innerHTML = html;
+        messagesEl.appendChild(div);
+        outputEl.classList.add('visible');
+        wrapper.classList.remove('minimized');
+        outputEl.scrollTop = outputEl.scrollHeight;
+        return div;
+      }
+
+      async function handleSubmit() {
+        await ensureGemini();
+        const input    = document.getElementById('notch-input');
+        const userText = input.value.trim();
+        input.value    = '';
+
+        // First message with no input → show prompt, no API call
+        if (!userText && gemini.isFirstMessage) {
+          addMessage('assistant', 'Screen is visible — describe what you need help with.');
+          return;
+        }
+
+        if (userText) addMessage('user', renderMarkdown(userText));
+
+        const loading = addMessage('assistant', '…', ['loading']);
+
+        try {
+          const screenshot = await window.electronAPI.takeScreenshot();
+          const reply      = await gemini.send(userText || null, screenshot);
+          loading.innerHTML = renderMarkdown(reply);
+          loading.classList.remove('loading');
+        } catch (err) {
+          loading.innerHTML = 'Error: ' + err.message;
+          loading.classList.replace('loading', 'error');
+        }
+
+        outputEl.scrollTop = outputEl.scrollHeight;
+      }
+
+      document.getElementById('notch-input').addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') handleSubmit();
+      });
+      document.getElementById('notch-submit').addEventListener('click', handleSubmit);
+
+      document.getElementById('ai-minimize').addEventListener('click', () => {
+        outputEl.classList.remove('visible');
+        wrapper.classList.add('minimized');
+      });
+
+      peekEl.addEventListener('click', () => {
+        outputEl.classList.add('visible');
+        wrapper.classList.remove('minimized');
+        outputEl.scrollTop = outputEl.scrollHeight;
       });
     </script>
   </body>
