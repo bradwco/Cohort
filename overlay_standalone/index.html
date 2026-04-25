@@ -4,91 +4,158 @@
     <meta charset="UTF-8" />
     <title>Focus Orb Overlay (standalone)</title>
     <style>
+      :root {
+        --bg:        rgba(26, 26, 30, 0.72);
+        --border:    rgba(255, 255, 255, 0.06);
+        --divider:   rgba(255, 255, 255, 0.10);
+        --text:      #dcd9d2;
+        --text-soft: #a8a59e;
+        --hover:     rgba(255, 255, 255, 0.10);
+      }
+
       html, body {
         margin: 0;
         padding: 0;
         height: 100%;
+        width: 100%;
         background: transparent;
         overflow: hidden;
-        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
-        color: #fff;
+        font-family: -apple-system, BlinkMacSystemFont, "Inter", "Segoe UI", system-ui, sans-serif;
+        color: var(--text);
         user-select: none;
+        cursor: default;
       }
 
-      .card {
-        -webkit-app-region: drag;          /* drag the window by the card */
-        margin: 12px;
-        padding: 16px 18px;
+      /* Vertical column pinned to the right edge of the window. */
+      .column {
+        position: absolute;
+        top: 0;
+        right: 0;
+        bottom: 0;
+        width: 72px;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: 14px;
+        padding: 22px 12px;
+        background: var(--bg);
+        backdrop-filter: blur(16px);
+        -webkit-backdrop-filter: blur(16px);
+        border-left: 1px solid var(--border);
+        box-sizing: border-box;
+      }
+
+      .avatars {
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+        align-items: center;
+      }
+
+      .avatar {
+        position: relative;
+        width: 36px;
+        height: 36px;
+        border-radius: 50%;
+        background: var(--c);
         display: flex;
         align-items: center;
-        gap: 16px;
-        background: rgba(20, 20, 30, 0.78);
-        border: 1px solid rgba(255, 255, 255, 0.08);
-        border-radius: 18px;
-        backdrop-filter: blur(14px);
-        -webkit-backdrop-filter: blur(14px);
-        box-shadow: 0 10px 40px rgba(0, 0, 0, 0.4);
-      }
-
-      .orb {
-        width: 56px;
-        height: 56px;
-        border-radius: 50%;
-        flex-shrink: 0;
-        background: radial-gradient(circle at 30% 30%, #b8a8ff 0%, #6b51e6 65%, #2d1d8c 100%);
-        box-shadow: 0 0 28px rgba(155, 140, 255, 0.7);
-        animation: pulse 3s ease-in-out infinite;
-      }
-
-      @keyframes pulse {
-        0%, 100% { transform: scale(1);    box-shadow: 0 0 28px rgba(155, 140, 255, 0.65); }
-        50%      { transform: scale(1.05); box-shadow: 0 0 42px rgba(155, 140, 255, 0.95); }
-      }
-
-      .info { display: flex; flex-direction: column; min-width: 0; }
-      .label  { font-size: 11px; opacity: 0.6; text-transform: uppercase; letter-spacing: 1px; }
-      .timer  { font-size: 28px; font-weight: 600; letter-spacing: 0.5px; line-height: 1.1; }
-
-      button {
-        -webkit-app-region: no-drag;        /* clickable, even though parent is draggable */
-        margin-left: auto;
-        background: rgba(255, 255, 255, 0.12);
-        color: #fff;
-        border: 1px solid rgba(255, 255, 255, 0.2);
-        border-radius: 10px;
-        padding: 8px 14px;
-        font: inherit;
+        justify-content: center;
+        color: rgba(255, 255, 255, 0.88);
         font-size: 13px;
-        cursor: pointer;
-        transition: background 0.15s ease;
+        font-weight: 500;
+        letter-spacing: 0.3px;
+        transition: transform 0.18s ease, box-shadow 0.18s ease;
       }
-      button:hover  { background: rgba(255, 255, 255, 0.22); }
-      button:active { background: rgba(255, 255, 255, 0.32); }
+      .avatar:hover {
+        transform: scale(1.08);
+        box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.12);
+      }
+
+      /* Hover label — renders to the LEFT of the avatar (window has transparent
+         padding on the left specifically for this). */
+      .name {
+        position: absolute;
+        right: calc(100% + 12px);
+        top: 50%;
+        transform: translateY(-50%);
+        white-space: nowrap;
+        background: rgba(20, 20, 24, 0.94);
+        color: var(--text);
+        padding: 6px 11px;
+        border-radius: 8px;
+        font-size: 12px;
+        font-weight: 400;
+        opacity: 0;
+        pointer-events: none;
+        border: 1px solid var(--border);
+        transition: opacity 0.18s ease;
+      }
+      .avatar:hover .name { opacity: 1; }
+
+      .divider {
+        width: 28px;
+        height: 1px;
+        background: var(--divider);
+        margin: 4px 0;
+      }
+
+      .timer {
+        font-size: 17px;
+        font-weight: 500;
+        letter-spacing: 0.6px;
+        color: var(--text);
+        font-variant-numeric: tabular-nums;
+      }
+
+      .stop {
+        background: rgba(255, 255, 255, 0.05);
+        color: var(--text-soft);
+        border: 1px solid var(--border);
+        border-radius: 18px;
+        padding: 6px 14px;
+        font: inherit;
+        font-size: 11px;
+        font-weight: 500;
+        letter-spacing: 0.4px;
+        cursor: pointer;
+        transition: background 0.15s ease, color 0.15s ease;
+      }
+      .stop:hover  { background: var(--hover); color: var(--text); }
+      .stop:active { background: rgba(255, 255, 255, 0.16); }
     </style>
   </head>
   <body>
-    <div class="card">
-      <div class="orb"></div>
-      <div class="info">
-        <div class="label">Focus</div>
-        <div class="timer" id="timer">25:00</div>
+    <div class="column">
+      <div class="avatars">
+        <div class="avatar" style="--c: #9c9088;">A<span class="name">Alex Chen</span></div>
+        <div class="avatar" style="--c: #8a958e;">M<span class="name">Maya Rodriguez</span></div>
+        <div class="avatar" style="--c: #93939a;">J<span class="name">Jamie Park</span></div>
+        <div class="avatar" style="--c: #a89483;">S<span class="name">Sam Taylor</span></div>
+        <div class="avatar" style="--c: #97889c;">R<span class="name">Riley Singh</span></div>
       </div>
-      <button id="summarize" title="Cluely-style help">Summarize</button>
+
+      <div class="divider"></div>
+
+      <div class="timer" id="timer">25:00</div>
+
+      <button class="stop" id="stop">Stop</button>
     </div>
 
     <script>
       let secs = 25 * 60;
       const timerEl = document.getElementById('timer');
-      setInterval(() => {
+      const tick = setInterval(() => {
         secs = Math.max(0, secs - 1);
         const m = String(Math.floor(secs / 60)).padStart(2, '0');
         const s = String(secs % 60).padStart(2, '0');
         timerEl.textContent = m + ':' + s;
+        if (secs === 0) clearInterval(tick);
       }, 1000);
 
-      document.getElementById('summarize').addEventListener('click', () => {
-        // Placeholder — later this will IPC into src/main/claude_agent/
-        console.log('summarize clicked');
+      document.getElementById('stop').addEventListener('click', () => {
+        window.close();
       });
     </script>
   </body>
