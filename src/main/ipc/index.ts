@@ -1,4 +1,4 @@
-import { app, BrowserWindow, ipcMain, shell } from 'electron';
+import { BrowserWindow, ipcMain, shell, screen, desktopCapturer } from 'electron';
 import * as fs from 'fs';
 import * as nodePath from 'path';
 import * as os from 'os';
@@ -101,4 +101,82 @@ export function registerIpcHandlers(): void {
 
   // --- Open URL in system browser ---
   ipcMain.handle(CH.OPEN_EXTERNAL, (_e, url: string) => shell.openExternal(url));
+
+  // ── Overlay window IPC ─────────────────────────────────────────────────
+  ipcMain.on('set-ignore-mouse-events', (event, ignore: boolean) => {
+    BrowserWindow.fromWebContents(event.sender)?.setIgnoreMouseEvents(ignore, { forward: true });
+  });
+
+  ipcMain.handle('get-config', () => ({
+    GEMINI_API_KEY:    (import.meta.env.GEMINI_API_KEY    as string) ?? '',
+    LOCAL_VLM_URL:     (import.meta.env.LOCAL_VLM_URL     as string) ?? 'http://127.0.0.1:11434/api/chat',
+    LOCAL_VLM_MODEL:   (import.meta.env.LOCAL_VLM_MODEL   as string) ?? 'moondream',
+    SUPABASE_URL:      (import.meta.env.SUPABASE_URL      as string) ?? '',
+    SUPABASE_ANON_KEY: (import.meta.env.SUPABASE_ANON_KEY as string) ?? '',
+    USER_ID:           getOverlayUserId(),
+    SESSION_ID:        getActiveSessionId() ?? '',
+  }));
+
+  ipcMain.handle('create-session', async (_e, { plannedDurationMinutes, workflowGroup }: { plannedDurationMinutes: number; workflowGroup: string }) => {
+    const userId = getOverlayUserId();
+    if (!userId) return null;
+    const session = await startSession(userId, workflowGroup, plannedDurationMinutes);
+    if (session) setActiveSessionId(session.id);
+    return session?.id ?? null;
+  });
+
+  ipcMain.handle('end-session', async (_e, { sessionId, flowScore, conversationHistory }: { sessionId: string; flowScore: number | null; conversationHistory: unknown[] }) => {
+    if (!sessionId) return;
+    const userId = getOverlayUserId();
+    await endSession(sessionId, 0, flowScore ?? 0, '', conversationHistory);
+    if (userId) await updateProfile(userId, { hardware_status: 'offline' });
+    setActiveSessionId(null);
+  });
+
+  ipcMain.handle('take-screenshot', async () => {
+    const { width, height } = screen.getPrimaryDisplay().workAreaSize;
+    const sources = await desktopCapturer.getSources({ types: ['screen'], thumbnailSize: { width, height } });
+    return sources[0]?.thumbnail.toDataURL() ?? null;
+  });
+
+  ipcMain.handle('take-thumbnail', async () => {
+    const sources = await desktopCapturer.getSources({ types: ['screen'], thumbnailSize: { width: 960, height: 540 } });
+    return sources[0]?.thumbnail.toDataURL() ?? null;
+  });
+
+  ipcMain.handle('classify-screen', async (_e, { imageDataUrl, endpoint, model }: { imageDataUrl: string; endpoint?: string; model?: string }) => {
+    const base64 = imageDataUrl.split(',')[1];
+    const prompt = [
+      'Classify this screen for a focus timer.',
+      'Use context, not just app names.',
+      'Return exactly one label:',
+      'deep_work = coding, writing, design, studying, technical reading',
+      'admin = calendar, email, settings, planning, short operational work',
+      'distracted = entertainment, shopping, social feeds, games, memes, unrelated browsing',
+    ].join('\n');
+    const ep = endpoint ?? process.env['LOCAL_VLM_URL'] ?? 'http://127.0.0.1:11434/api/chat';
+    const m  = model    ?? process.env['LOCAL_VLM_MODEL'] ?? 'moondream';
+    const resp = await fetch(ep, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ model: m, stream: false, messages: [{ role: 'user', content: prompt, images: [base64] }] }),
+    });
+    if (!resp.ok) throw new Error(`Local classifier ${resp.status}`);
+    const data = await resp.json() as { message?: { content?: string }; response?: string };
+    const text = String(data.message?.content ?? data.response ?? '').toLowerCase().trim();
+    if (text.includes('distracted') || text.includes('distraction')) return 'distracted';
+    if (text.includes('admin')) return 'admin';
+    if (text.includes('deep') || text.includes('productive')) return 'deep_work';
+    return 'distracted';
+  });
+}
+
+function getOverlayUserId(): string {
+  try {
+    const filePath = nodePath.join(os.tmpdir(), 'cohort-user.json');
+    const data = JSON.parse(fs.readFileSync(filePath, 'utf8')) as { userId?: string };
+    return data.userId ?? '';
+  } catch {
+    return '';
+  }
 }

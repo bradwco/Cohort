@@ -88,13 +88,19 @@
 
       (async () => {
         try {
-          sessionId = await window.electronAPI.createSession({
-            plannedDurationMinutes: Math.round(secs / 60),
-            workflowGroup: 'Focus Session',
-          });
-          console.log('[session] created:', sessionId);
+          const cfg = await window.electronAPI.getConfig();
+          if (cfg.SESSION_ID) {
+            sessionId = cfg.SESSION_ID;
+            console.log('[session] using existing:', sessionId);
+          } else {
+            sessionId = await window.electronAPI.createSession({
+              plannedDurationMinutes: Math.round(secs / 60),
+              workflowGroup: 'Focus Session',
+            });
+            console.log('[session] created:', sessionId);
+          }
         } catch (e) {
-          console.warn('[session] failed to create:', e.message);
+          console.warn('[session] failed to init:', e.message);
         }
       })();
 

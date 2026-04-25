@@ -1,8 +1,9 @@
 import { app, BrowserWindow } from 'electron';
 import { resolve } from 'node:path';
 import { createMainWindow } from './windows/main_window';
+import { createOverlayWindow } from './windows/overlay_window';
 import { registerIpcHandlers } from './ipc';
-import { destroyMqtt } from './mqtt';
+import { destroyMqtt, setDockedCallback, setOfflineCallback } from './mqtt';
 
 const PROTOCOL = 'cohort';
 
@@ -35,12 +36,39 @@ if (!gotTheLock) {
     }
   });
 
+  let mainWin: BrowserWindow | null = null;
+  let overlayWin: BrowserWindow | null = null;
+
+  function showOverlay(): void {
+    if (overlayWin && !overlayWin.isDestroyed()) return;
+    overlayWin = createOverlayWindow();
+    overlayWin.on('closed', () => {
+      overlayWin = null;
+      mainWin?.show();
+      mainWin?.focus();
+    });
+  }
+
+  function closeOverlay(): void {
+    if (overlayWin && !overlayWin.isDestroyed()) overlayWin.close();
+  }
+
   app.whenReady().then(() => {
     registerIpcHandlers();
-    createMainWindow();
+    mainWin = createMainWindow();
+
+    setDockedCallback(() => {
+      mainWin?.hide();
+      showOverlay();
+    });
+
+    setOfflineCallback(() => {
+      closeOverlay();
+    });
 
     app.on('activate', () => {
-      if (BrowserWindow.getAllWindows().length === 0) createMainWindow();
+      if (!mainWin || mainWin.isDestroyed()) mainWin = createMainWindow();
+      else { mainWin.show(); mainWin.focus(); }
     });
   });
 
