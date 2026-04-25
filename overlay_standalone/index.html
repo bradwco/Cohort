@@ -22,17 +22,34 @@
           </svg>
         </button>
       </div>
+
       <div class="ai-peek" id="ai-peek" title="Show conversation"></div>
-      <div class="ai-output" id="ai-output">
-        <button class="ai-minimize" id="ai-minimize" title="Minimize">
-          <svg width="10" height="10" viewBox="0 0 10 10" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-            <path d="M6.5 1H9V3.5M9 1L5.5 4.5"/>
-            <path d="M3.5 9H1V6.5M1 9L4.5 5.5"/>
+
+      <!-- ai-panel: fixed header + scrollable body -->
+      <div class="ai-panel" id="ai-panel">
+        <div class="ai-panel-header">
+          <button class="ai-minimize" id="ai-minimize" title="Minimize">
+            <svg width="10" height="10" viewBox="0 0 10 10" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <path d="M6.5 1H9V3.5M9 1L5.5 4.5"/>
+              <path d="M3.5 9H1V6.5M1 9L4.5 5.5"/>
+            </svg>
+          </button>
+        </div>
+        <div class="ai-scroll" id="ai-scroll">
+          <div id="ai-messages"></div>
+        </div>
+        <div class="ai-resize-grip" id="ai-resize-grip" title="Resize">
+          <svg width="10" height="10" viewBox="0 0 10 10" fill="currentColor" aria-hidden="true">
+            <circle cx="8" cy="8" r="1.5"/>
+            <circle cx="4" cy="8" r="1.5"/>
+            <circle cx="8" cy="4" r="1.5"/>
           </svg>
-        </button>
-        <div id="ai-messages"></div>
+        </div>
       </div>
     </div>
+
+    <div id="focus-ring"></div>
+    <div id="focus-debug"></div>
 
     <!-- Right column -->
     <div class="column" id="column">
@@ -59,6 +76,7 @@
     </div>
 
     <script src="ai/gemini.js"></script>
+    <script src="ai/classifier.js"></script>
     <script>
       // ── Timer ──────────────────────────────────────────────────────────
       let secs = 25 * 60;
@@ -73,8 +91,10 @@
 
       document.getElementById('stop').addEventListener('click', () => window.close());
 
+      let lastActivityTime = Date.now();
+
       // ── Notch drag (X + Y) ─────────────────────────────────────────────
-      const wrapper    = document.getElementById('notch-wrapper');
+      const wrapper     = document.getElementById('notch-wrapper');
       const notchHandle = document.getElementById('notch-handle');
       let notchDragging = false, notchOffX = 0, notchOffY = 0;
 
@@ -91,8 +111,8 @@
       });
 
       // ── Column drag (Y only) ───────────────────────────────────────────
-      const column      = document.getElementById('column');
-      const colHandle   = document.getElementById('column-handle');
+      const column    = document.getElementById('column');
+      const colHandle = document.getElementById('column-handle');
       let colDragging = false, colOffY = 0;
 
       colHandle.addEventListener('mousedown', (e) => {
@@ -105,12 +125,28 @@
         e.preventDefault();
       });
 
+      // ── Panel resize ───────────────────────────────────────────────────
+      const aiPanelEl  = document.getElementById('ai-panel');
+      const aiScrollEl = document.getElementById('ai-scroll');
+      const resizeGrip = document.getElementById('ai-resize-grip');
+      let resizing = false, rsY = 0, rsH = 0;
+
+      resizeGrip.addEventListener('mousedown', (e) => {
+        resizing = true;
+        rsY = e.clientY;
+        rsH = aiScrollEl.getBoundingClientRect().height;
+        window.electronAPI.setIgnoreMouseEvents(false);
+        e.preventDefault();
+      });
+
       document.addEventListener('mouseup', () => {
         notchDragging = false;
         colDragging   = false;
+        resizing      = false;
       });
 
       document.addEventListener('mousemove', (e) => {
+        lastActivityTime = Date.now();
         if (notchDragging) {
           wrapper.style.left = (e.clientX - notchOffX) + 'px';
           wrapper.style.top  = (e.clientY - notchOffY) + 'px';
@@ -120,6 +156,10 @@
           column.style.top = (e.clientY - colOffY) + 'px';
           return;
         }
+        if (resizing) {
+          aiScrollEl.style.maxHeight = Math.max(80, rsH + (e.clientY - rsY)) + 'px';
+          return;
+        }
         const el = document.elementFromPoint(e.clientX, e.clientY);
         const overUI = el && el.closest('#notch-wrapper, .column');
         window.electronAPI.setIgnoreMouseEvents(!overUI);
@@ -127,7 +167,7 @@
 
       // ── Gemini AI ──────────────────────────────────────────────────────
       let gemini = null;
-      const outputEl   = document.getElementById('ai-output');
+      const peekEl     = document.getElementById('ai-peek');
       const messagesEl = document.getElementById('ai-messages');
 
       async function ensureGemini() {
@@ -145,16 +185,14 @@
           .replace(/\n/g,            '<br>');
       }
 
-      const peekEl = document.getElementById('ai-peek');
-
       function addMessage(role, html, classList = []) {
         const div = document.createElement('div');
         div.className = ['ai-message', role, ...classList].join(' ');
         div.innerHTML = html;
         messagesEl.appendChild(div);
-        outputEl.classList.add('visible');
+        aiPanelEl.classList.add('visible');
         wrapper.classList.remove('minimized');
-        outputEl.scrollTop = outputEl.scrollHeight;
+        aiScrollEl.scrollTop = aiScrollEl.scrollHeight;
         return div;
       }
 
@@ -164,14 +202,12 @@
         const userText = input.value.trim();
         input.value    = '';
 
-        // First message with no input → show prompt, no API call
         if (!userText && gemini.isFirstMessage) {
           addMessage('assistant', 'Screen is visible — describe what you need help with.');
           return;
         }
 
         if (userText) addMessage('user', renderMarkdown(userText));
-
         const loading = addMessage('assistant', '…', ['loading']);
 
         try {
@@ -184,7 +220,7 @@
           loading.classList.replace('loading', 'error');
         }
 
-        outputEl.scrollTop = outputEl.scrollHeight;
+        aiScrollEl.scrollTop = aiScrollEl.scrollHeight;
       }
 
       document.getElementById('notch-input').addEventListener('keydown', (e) => {
@@ -193,15 +229,112 @@
       document.getElementById('notch-submit').addEventListener('click', handleSubmit);
 
       document.getElementById('ai-minimize').addEventListener('click', () => {
-        outputEl.classList.remove('visible');
+        aiPanelEl.classList.remove('visible');
         wrapper.classList.add('minimized');
       });
 
       peekEl.addEventListener('click', () => {
-        outputEl.classList.add('visible');
+        aiPanelEl.classList.add('visible');
         wrapper.classList.remove('minimized');
-        outputEl.scrollTop = outputEl.scrollHeight;
+        aiScrollEl.scrollTop = aiScrollEl.scrollHeight;
       });
+
+      // ── Focus state tracking ───────────────────────────────────────────
+      // Local-first pipeline: cheap thumbnail capture -> perceptual hash gate ->
+      // localhost vision model -> rolling five-minute productivity score.
+      const IDLE_MS             = 30_000;
+      const ACTIVE_CHECK_MS     = 5_000;
+      const CLASSIFY_COOLDOWN   = 10_000;
+      const HASH_DIFF_THRESHOLD = 13;       // roughly 5% of a 16x16 average hash
+
+      let focusClassifier     = null;
+      let focusGate           = null;
+      let focusSmoother       = null;
+      let lastActiveCheckTime = 0;
+      let lastClassifyTime    = 0;
+      let classifyInFlight    = false;
+      let currentFocusState   = 'productive';
+
+      function setFocusState(state) {
+        if (state === currentFocusState) return;
+        currentFocusState = state;
+        document.body.classList.remove('state-distracted', 'state-idle');
+        if (state !== 'productive') document.body.classList.add('state-' + state);
+      }
+
+      async function checkFocus() {
+        try {
+          if (!focusClassifier) {
+            const cfg = await window.electronAPI.getConfig();
+            focusClassifier = new ScreenClassifier({
+              endpoint: cfg.LOCAL_VLM_URL,
+              model: cfg.LOCAL_VLM_MODEL,
+            });
+            focusGate = new PerceptualHashGate({ threshold: HASH_DIFF_THRESHOLD });
+            focusSmoother = new FocusSmoother({
+              windowMs: 5 * 60_000,
+              minSamples: 3,
+              productiveThreshold: 0.7,
+            });
+          }
+
+          const now = Date.now();
+          const isActive = (now - lastActivityTime) < IDLE_MS;
+          const dbg = document.getElementById('focus-debug');
+
+          // When idle: poll every 1s for mouse movement to exit
+          if (currentFocusState === 'idle') {
+            if (isActive) setFocusState('productive');
+            return;
+          }
+
+          // Not idle: throttle the rest to ACTIVE_CHECK_MS
+          if (now - lastActiveCheckTime < ACTIVE_CHECK_MS) return;
+          lastActiveCheckTime = now;
+
+          if (!isActive) {
+            focusSmoother.reset();
+            setFocusState('idle');
+            return;
+          }
+
+          // Active + changed screen + local model available -> classify
+          if (classifyInFlight || now - lastClassifyTime < CLASSIFY_COOLDOWN) return;
+
+          classifyInFlight = true;
+          lastClassifyTime = now;
+          const thumbUrl = await window.electronAPI.takeThumbnail();
+          if (!thumbUrl) {
+            classifyInFlight = false;
+            return;
+          }
+
+          const gate = await focusGate.hasSignificantChange(thumbUrl);
+          if (!gate.changed) {
+            classifyInFlight = false;
+            if (dbg) dbg.textContent = `unchanged · hash ${gate.diff} · ${currentFocusState}`;
+            return;
+          }
+
+          focusClassifier.classify(thumbUrl).then((result) => {
+            const smoothed = focusSmoother.add(result);
+            if (smoothed.ready) setFocusState(smoothed.label);
+            if (dbg) {
+              const pct = Math.round(smoothed.productiveRatio * 100);
+              dbg.textContent = `${result} · ${pct}% productive · n=${smoothed.sampleCount}`;
+            }
+          }).catch((e) => {
+            if (dbg) dbg.textContent = 'local classifier: ' + e.message;
+          }).finally(() => {
+            classifyInFlight = false;
+          });
+        } catch (e) {
+          classifyInFlight = false;
+          console.warn('[focus] error:', e.message);
+        }
+      }
+
+      setInterval(checkFocus, 1_000);
     </script>
   </body>
 </html>
