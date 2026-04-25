@@ -107,8 +107,8 @@ class FocusSmoother {
 
 class ScreenClassifier {
   constructor({ endpoint, model } = {}) {
-    this.endpoint = endpoint || 'http://127.0.0.1:11434/api/chat';
-    this.model = model || 'moondream';
+    this.endpoint = endpoint;
+    this.model = model;
   }
 
   async classify(thumbnailDataUrl) {

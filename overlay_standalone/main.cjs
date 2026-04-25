@@ -20,15 +20,76 @@ function loadEnv() {
 
 const env = loadEnv();
 
+function getStoredUserId() {
+  try {
+    const filePath = path.join(app.getPath('userData'), 'cohort-user.json');
+    const data = JSON.parse(fs.readFileSync(filePath, 'utf8'));
+    return data.userId ?? null;
+  } catch {
+    return env.USER_ID ?? null;
+  }
+}
+
 ipcMain.on('set-ignore-mouse-events', (event, ignore) => {
   BrowserWindow.fromWebContents(event.sender)?.setIgnoreMouseEvents(ignore, { forward: true });
 });
 
 ipcMain.handle('get-config', () => ({
-  GEMINI_API_KEY: env.GEMINI_API_KEY || '',
-  LOCAL_VLM_URL: env.LOCAL_VLM_URL || 'http://127.0.0.1:11434/api/chat',
-  LOCAL_VLM_MODEL: env.LOCAL_VLM_MODEL || 'moondream',
+  GEMINI_API_KEY:    env.GEMINI_API_KEY    || '',
+  LOCAL_VLM_URL:     env.LOCAL_VLM_URL     || 'http://127.0.0.1:11434/api/chat',
+  LOCAL_VLM_MODEL:   env.LOCAL_VLM_MODEL   || 'moondream',
+  SUPABASE_URL:      env.SUPABASE_URL      || '',
+  SUPABASE_ANON_KEY: env.SUPABASE_ANON_KEY || '',
 }));
+
+ipcMain.handle('create-session', async (_event, { plannedDurationMinutes, workflowGroup }) => {
+  const url    = (env.SUPABASE_URL || '').replace(/\/$/, '');
+  const key    = env.SUPABASE_ANON_KEY || '';
+  const userId = getStoredUserId();
+  if (!url || !key) throw new Error('Supabase not configured');
+
+  const resp = await fetch(`${url}/rest/v1/sessions`, {
+    method: 'POST',
+    headers: {
+      'Content-Type':  'application/json',
+      'apikey':        key,
+      'Authorization': `Bearer ${key}`,
+      'Prefer':        'return=representation',
+    },
+    body: JSON.stringify({
+      user_id:                  userId,
+      workflow_group:           workflowGroup,
+      planned_duration_minutes: plannedDurationMinutes,
+      started_at:               new Date().toISOString(),
+      pause_minutes_used:       0,
+    }),
+  });
+  if (!resp.ok) throw new Error(`Supabase create-session ${resp.status}: ${await resp.text()}`);
+  const rows = await resp.json();
+  return rows[0]?.id ?? null;
+});
+
+ipcMain.handle('end-session', async (_event, { sessionId, flowScore, conversationHistory }) => {
+  const url = (env.SUPABASE_URL || '').replace(/\/$/, '');
+  const key = env.SUPABASE_ANON_KEY || '';
+  if (!url || !key || !sessionId) return;
+
+  const resp = await fetch(`${url}/rest/v1/sessions?id=eq.${sessionId}`, {
+    method: 'PATCH',
+    headers: {
+      'Content-Type':  'application/json',
+      'apikey':        key,
+      'Authorization': `Bearer ${key}`,
+    },
+    body: JSON.stringify({
+      ended_at:             new Date().toISOString(),
+      pause_minutes_used:   0,
+      flow_score:           flowScore ?? null,
+      conversation_history: conversationHistory ?? [],
+    }),
+  });
+  if (!resp.ok) console.warn(`[session] end-session ${resp.status}: ${await resp.text()}`);
+});
 
 ipcMain.handle('take-screenshot', async () => {
   const { width, height } = screen.getPrimaryDisplay().workAreaSize;

@@ -55,6 +55,10 @@ const api = {
     return () => ipcRenderer.off(PUSH.FRIEND_NUDGE, h);
   },
 
+  // Persist userId to shared file so overlay_standalone can read it
+  saveUserSession: (userId: string, email: string): Promise<void> =>
+    ipcRenderer.invoke(CH.SAVE_USER_SESSION, userId, email),
+
   // Open URL in the system browser
   openExternal: (url: string): Promise<void> =>
     ipcRenderer.invoke(CH.OPEN_EXTERNAL, url),

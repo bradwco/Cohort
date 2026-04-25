@@ -21,6 +21,9 @@ export const CH = {
   ACTIVITY_LOG: 'supabase:activity-log',
   ACTIVITY_LOGS_GET: 'supabase:activity-logs-get',
 
+  // App
+  SAVE_USER_SESSION: 'app:save-user-session',
+
   // Shell
   OPEN_EXTERNAL: 'shell:open-external',
 

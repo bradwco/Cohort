@@ -89,7 +89,36 @@
         if (secs === 0) clearInterval(tick);
       }, 1000);
 
-      document.getElementById('stop').addEventListener('click', () => window.close());
+      let sessionId = null;
+
+      (async () => {
+        try {
+          sessionId = await window.electronAPI.createSession({
+            plannedDurationMinutes: Math.round(secs / 60),
+            workflowGroup: 'Focus Session',
+          });
+          console.log('[session] created:', sessionId);
+        } catch (e) {
+          console.warn('[session] failed to create:', e.message);
+        }
+      })();
+
+      document.getElementById('stop').addEventListener('click', async () => {
+        try {
+          if (sessionId) {
+            const score = focusSmoother ? +(focusSmoother.state().productiveRatio * 10).toFixed(1) : null;
+            await window.electronAPI.endSession({
+              sessionId,
+              flowScore: score,
+              conversationHistory: gemini?.history ?? [],
+            });
+          }
+        } catch (e) {
+          console.warn('[session] failed to end:', e.message);
+        } finally {
+          window.close();
+        }
+      });
 
       let lastActivityTime = Date.now();
 

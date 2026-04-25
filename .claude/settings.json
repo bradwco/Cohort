@@ -10,7 +10,9 @@
       "Bash(./node_modules/electron/dist/electron.exe ./probe.js)",
       "Bash(timeout 10 ./node_modules/electron/dist/electron.exe .)",
       "Bash(unset ELECTRON_RUN_AS_NODE)",
-      "Bash(npm uninstall *)"
+      "Bash(npm uninstall *)",
+      "Read(//c/Users/bradc/AppData/Roaming/cohort/**)",
+      "Read(//c/Users/bradc/AppData/Roaming/Cohort/**)"
     ]
   }
 }

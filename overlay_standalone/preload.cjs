@@ -6,4 +6,6 @@ contextBridge.exposeInMainWorld('electronAPI', {
   takeThumbnail:        ()       => ipcRenderer.invoke('take-thumbnail'),
   classifyScreen:       (payload) => ipcRenderer.invoke('classify-screen', payload),
   getConfig:            ()       => ipcRenderer.invoke('get-config'),
+  createSession:        (data)   => ipcRenderer.invoke('create-session', data),
+  endSession:           (data)   => ipcRenderer.invoke('end-session', data),
 });

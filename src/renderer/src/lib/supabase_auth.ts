@@ -57,6 +57,9 @@ export function getSavedAuthSession(): AuthSession | null {
 
 export function saveAuthSession(session: AuthSession) {
   window.localStorage.setItem(AUTH_SESSION_KEY, JSON.stringify(session));
+  if (session.userId && (window as any).api?.saveUserSession) {
+    (window as any).api.saveUserSession(session.userId, session.email ?? '').catch(() => {});
+  }
 }
 
 export async function signOut() {

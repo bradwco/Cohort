@@ -1,4 +1,6 @@
-import { BrowserWindow, ipcMain, shell } from 'electron';
+import { app, BrowserWindow, ipcMain, shell } from 'electron';
+import * as fs from 'fs';
+import * as nodePath from 'path';
 import { CH, PUSH } from './channels';
 import {
   getProfile,
@@ -89,6 +91,12 @@ export function registerIpcHandlers(): void {
   ipcMain.handle(CH.HW_SIMULATE, (_e, userId: string, payload: Record<string, unknown>) =>
     simulateHardwareEvent(userId, payload),
   );
+
+  // Save user session to shared file for overlay_standalone to read
+  ipcMain.handle(CH.SAVE_USER_SESSION, (_e, userId: string, email: string) => {
+    const filePath = nodePath.join(app.getPath('userData'), 'cohort-user.json');
+    fs.writeFileSync(filePath, JSON.stringify({ userId, email, savedAt: new Date().toISOString() }));
+  });
 
   // --- Open URL in system browser ---
   ipcMain.handle(CH.OPEN_EXTERNAL, (_e, url: string) => shell.openExternal(url));
