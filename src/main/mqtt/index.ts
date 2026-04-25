@@ -20,6 +20,12 @@ let pauseStart: number | null = null;
 let totalPauseMs = 0;
 const simulatedFriendPauses = new Map<string, { pauseStart: number | null; totalPauseMs: number }>();
 
+let onDockedCallback: (() => void) | null = null;
+let onOfflineCallback: (() => void) | null = null;
+
+export function setDockedCallback(cb: () => void): void { onDockedCallback = cb; }
+export function setOfflineCallback(cb: () => void): void { onOfflineCallback = cb; }
+
 export function getMqttClient(): MqttClient | null {
   return client;
 }
@@ -147,6 +153,7 @@ async function handleOwnOrbState(payload: OrbPayload): Promise<void> {
 
     broadcastToRenderer('mqtt:own-state', ownPayload);
     publishOwnState({ ...ownPayload, origin: 'desktop-sim' });
+    onDockedCallback?.();
     return;
   }
 
@@ -196,6 +203,7 @@ async function handleOwnOrbState(payload: OrbPayload): Promise<void> {
     const ownPayload = { status: 'offline' };
     broadcastToRenderer('mqtt:own-state', ownPayload);
     publishOwnState({ ...ownPayload, origin: 'desktop-sim' });
+    onOfflineCallback?.();
   }
 }
 

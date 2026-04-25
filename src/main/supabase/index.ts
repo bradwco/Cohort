@@ -128,6 +128,7 @@ export async function endSession(
   pauseMinutesUsed: number,
   flowScore: number,
   aiSummary: string,
+  conversationHistory?: unknown[],
 ): Promise<void> {
   const { error } = await getSupabaseClient()
     .from('sessions')
@@ -136,6 +137,7 @@ export async function endSession(
       pause_minutes_used: pauseMinutesUsed,
       flow_score: flowScore,
       ai_summary: aiSummary,
+      ...(conversationHistory !== undefined && { conversation_history: conversationHistory }),
     })
     .eq('id', sessionId);
   if (error) console.error('endSession:', error.message);
