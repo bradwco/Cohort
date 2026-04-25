@@ -3,136 +3,24 @@
   <head>
     <meta charset="UTF-8" />
     <title>Focus Orb Overlay (standalone)</title>
-    <style>
-      :root {
-        --bg:        rgba(15, 19, 27, 0.86);
-        --border:    rgba(255, 255, 255, 0.04);
-        --divider:   rgba(255, 255, 255, 0.06);
-        --text:      #e6dfd1;
-        --text-soft: #8e8676;
-        --hover:     rgba(255, 255, 255, 0.06);
-        --accent:    #e8a87c;
-      }
-
-      html, body {
-        margin: 0;
-        padding: 0;
-        height: 100%;
-        width: 100%;
-        background: transparent;
-        overflow: hidden;
-        font-family: -apple-system, BlinkMacSystemFont, "Inter", "Segoe UI", system-ui, sans-serif;
-        color: var(--text);
-        user-select: none;
-        cursor: default;
-      }
-
-      /* Floating curvy pill pinned to the middle-right of the window. */
-      .column {
-        position: absolute;
-        top: 50%;
-        right: 8px;
-        transform: translateY(-50%);
-        width: 76px;
-        display: flex;
-        flex-direction: column;
-        align-items: center;
-        gap: 14px;
-        padding: 18px 12px;
-        background: var(--bg);
-        backdrop-filter: blur(16px);
-        -webkit-backdrop-filter: blur(16px);
-        border: 1px solid var(--border);
-        border-radius: 38px;
-        box-sizing: border-box;
-      }
-
-      .avatars {
-        display: flex;
-        flex-direction: column;
-        gap: 10px;
-        align-items: center;
-      }
-
-      .avatar {
-        position: relative;
-        width: 36px;
-        height: 36px;
-        border-radius: 50%;
-        background: var(--c);
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        color: rgba(255, 255, 255, 0.88);
-        font-size: 13px;
-        font-weight: 500;
-        letter-spacing: 0.3px;
-        transition: transform 0.18s ease;
-      }
-      .avatar:hover { transform: scale(1.08); }
-
-      /* Status glows — placeholder until wired to real presence data. */
-      .status-active { box-shadow: 0 0 14px 0 rgba(122, 196, 128, 0.55); }
-      .status-idle   { box-shadow: 0 0 10px 0 rgba(150, 145, 138, 0.45); }
-      .status-off    { box-shadow: 0 0 14px 0 rgba(214, 110, 100, 0.55); }
-
-      /* Hover label — renders to the LEFT of the avatar (window has transparent
-         padding on the left specifically for this). */
-      .name {
-        position: absolute;
-        right: calc(100% + 12px);
-        top: 50%;
-        transform: translateY(-50%);
-        white-space: nowrap;
-        background: rgba(12, 15, 22, 0.95);
-        color: var(--text);
-        padding: 6px 12px;
-        border-radius: 14px;
-        font-size: 12px;
-        font-weight: 400;
-        opacity: 0;
-        pointer-events: none;
-        border: 1px solid var(--border);
-        transition: opacity 0.18s ease;
-      }
-      .avatar:hover .name { opacity: 1; }
-
-      .divider {
-        width: 28px;
-        height: 1px;
-        background: var(--divider);
-        margin: 4px 0;
-      }
-
-      .timer {
-        font-family: "Cormorant Garamond", "Playfair Display", Georgia, "Times New Roman", serif;
-        font-size: 22px;
-        font-weight: 500;
-        letter-spacing: 0.5px;
-        color: var(--text);
-        font-variant-numeric: tabular-nums;
-      }
-
-      .stop {
-        width: 32px;
-        height: 32px;
-        padding: 0;
-        background: rgba(255, 255, 255, 0.05);
-        color: var(--text-soft);
-        border: 1px solid var(--border);
-        border-radius: 50%;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        cursor: pointer;
-        transition: background 0.15s ease, color 0.15s ease;
-      }
-      .stop:hover  { background: var(--hover); color: var(--text); }
-      .stop:active { background: rgba(255, 255, 255, 0.16); }
-      .stop svg    { display: block; }
-    </style>
+    <link rel="stylesheet" href="style.css" />
   </head>
   <body>
+    <div class="notch" id="notch">
+      <div class="notch-handle" id="notch-handle" title="Drag to move">
+        <svg width="10" height="10" viewBox="0 0 10 10" fill="currentColor" aria-hidden="true">
+          <circle cx="2" cy="2" r="1.5"/><circle cx="8" cy="2" r="1.5"/>
+          <circle cx="2" cy="8" r="1.5"/><circle cx="8" cy="8" r="1.5"/>
+        </svg>
+      </div>
+      <input class="notch-input" id="notch-input" type="text" placeholder="Ask me anything…" />
+      <button class="notch-submit" aria-label="Submit">
+        <svg width="14" height="11" viewBox="0 0 14 11" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <path d="M13 1v5a2 2 0 0 1-2 2H1m0 0 3-3M1 8l3 3"/>
+        </svg>
+      </button>
+    </div>
+
     <div class="column">
       <div class="avatars">
         <div class="avatar status-active" style="--c: #c19a7a;">A<span class="name">Alex Chen</span></div>
@@ -166,6 +54,38 @@
 
       document.getElementById('stop').addEventListener('click', () => {
         window.close();
+      });
+
+      // Drag handle
+      const notch = document.getElementById('notch');
+      const handle = document.getElementById('notch-handle');
+      let dragging = false;
+      let dragOffsetX = 0;
+      let dragOffsetY = 0;
+
+      handle.addEventListener('mousedown', (e) => {
+        const rect = notch.getBoundingClientRect();
+        notch.style.transform = 'none';
+        notch.style.left = rect.left + 'px';
+        notch.style.top  = rect.top  + 'px';
+        dragging = true;
+        dragOffsetX = e.clientX - rect.left;
+        dragOffsetY = e.clientY - rect.top;
+        window.electronAPI.setIgnoreMouseEvents(false);
+        e.preventDefault();
+      });
+
+      document.addEventListener('mouseup', () => { dragging = false; });
+
+      document.addEventListener('mousemove', (e) => {
+        if (dragging) {
+          notch.style.left = (e.clientX - dragOffsetX) + 'px';
+          notch.style.top  = (e.clientY - dragOffsetY) + 'px';
+          return;
+        }
+        const el = document.elementFromPoint(e.clientX, e.clientY);
+        const overUI = el && el.closest('.column, .notch');
+        window.electronAPI.setIgnoreMouseEvents(!overUI);
       });
     </script>
   </body>
