@@ -101,4 +101,70 @@ export function registerIpcHandlers(): void {
 
   // --- Open URL in system browser ---
   ipcMain.handle(CH.OPEN_EXTERNAL, (_e, url: string) => shell.openExternal(url));
+  ipcMain.handle(CH.OPEN_AUTH_WINDOW, (event, url: string) => openAuthWindow(url, BrowserWindow.fromWebContents(event.sender)));
+}
+
+function openAuthWindow(url: string, parent: BrowserWindow | null): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const authWin = new BrowserWindow({
+      width: 520,
+      height: 720,
+      parent: parent ?? undefined,
+      modal: Boolean(parent),
+      show: false,
+      autoHideMenuBar: true,
+      backgroundColor: '#08090f',
+      titleBarStyle: 'hidden',
+      webPreferences: {
+        nodeIntegration: false,
+        contextIsolation: true,
+        sandbox: true,
+      },
+    });
+
+    let settled = false;
+
+    const finish = (callbackUrl: string) => {
+      if (settled) return;
+      settled = true;
+      resolve(callbackUrl);
+      if (!authWin.isDestroyed()) authWin.close();
+    };
+
+    const fail = () => {
+      if (settled) return;
+      settled = true;
+      reject(new Error('Google sign in was closed before it finished.'));
+    };
+
+    const maybeFinish = (nextUrl: string) => {
+      if (!nextUrl.startsWith('cohort://')) return false;
+      finish(nextUrl);
+      return true;
+    };
+
+    authWin.once('ready-to-show', () => authWin.show());
+    authWin.once('closed', fail);
+
+    authWin.webContents.on('will-navigate', (navEvent, nextUrl) => {
+      if (maybeFinish(nextUrl)) navEvent.preventDefault();
+    });
+
+    authWin.webContents.on('will-redirect', (navEvent, nextUrl) => {
+      if (maybeFinish(nextUrl)) navEvent.preventDefault();
+    });
+
+    authWin.webContents.setWindowOpenHandler(({ url: nextUrl }) => {
+      if (maybeFinish(nextUrl)) return { action: 'deny' };
+      return { action: 'allow' };
+    });
+
+    authWin.loadURL(url).catch((err) => {
+      if (!settled) {
+        settled = true;
+        reject(err);
+      }
+      if (!authWin.isDestroyed()) authWin.close();
+    });
+  });
 }

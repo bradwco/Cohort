@@ -18,7 +18,7 @@ type Props = {
 export function Header({ view, sessionActive, telemetryOpen, onToggleTelemetry }: Props) {
   const meta = TITLES[view];
   return (
-    <div className="mb-8 flex items-start justify-between gap-5 border-b border-line px-10 pb-7 pt-8">
+    <div className="[-webkit-app-region:drag] mb-8 flex items-start justify-between gap-5 border-b border-line px-10 pb-7 pt-8">
       <div>
         <div className="mb-2 font-mono text-[10px] uppercase tracking-[0.16em] text-ink-faint">
           cohort / {view}
@@ -38,7 +38,7 @@ export function Header({ view, sessionActive, telemetryOpen, onToggleTelemetry }
         <button
           type="button"
           onClick={onToggleTelemetry}
-          className="flex items-center gap-2.5 rounded border border-line-mid bg-transparent px-3 py-1.5 text-ink-dim transition-colors hover:bg-white/[0.03]"
+          className="[-webkit-app-region:no-drag] flex items-center gap-2.5 rounded border border-line-mid bg-transparent px-3 py-1.5 text-ink-dim transition-colors hover:bg-white/[0.03]"
         >
           <span className="font-mono text-[11px] tracking-[0.1em]">
             {telemetryOpen ? 'HIDE' : 'SHOW'} TELEMETRY

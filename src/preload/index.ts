@@ -62,6 +62,8 @@ const api = {
   // Open URL in the system browser
   openExternal: (url: string): Promise<void> =>
     ipcRenderer.invoke(CH.OPEN_EXTERNAL, url),
+  openAuthWindow: (url: string): Promise<string> =>
+    ipcRenderer.invoke(CH.OPEN_AUTH_WINDOW, url),
 
   // Hardware simulator (dev only)
   // Hardware simulator

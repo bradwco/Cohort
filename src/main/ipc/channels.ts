@@ -26,6 +26,7 @@ export const CH = {
 
   // Shell
   OPEN_EXTERNAL: 'shell:open-external',
+  OPEN_AUTH_WINDOW: 'shell:open-auth-window',
 
   // Hardware simulator (dev only)
   HW_SIMULATE: 'hw:simulate',
