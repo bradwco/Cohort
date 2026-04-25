@@ -17,6 +17,15 @@ export type AuthSession = {
   profile?: Partial<OnboardingData>;
 };
 
+type ProfileRow = {
+  id: string;
+  username: string;
+  orb_color: string;
+  hardware_status: 'docked' | 'offline';
+  current_activity: string;
+  last_ping: string;
+};
+
 export const AUTH_SESSION_KEY = 'cohort:auth-session:v1';
 const PENDING_PROVIDER_KEY = 'cohort:pending-auth-provider:v1';
 const PENDING_PROFILE_KEY = 'cohort:pending-profile:v1';
@@ -26,7 +35,7 @@ export const supabase =
     ? createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
         auth: {
           autoRefreshToken: true,
-          detectSessionInUrl: true,
+          detectSessionInUrl: false,
           persistSession: true,
           storageKey: 'cohort:supabase-auth:v1',
         },
@@ -81,6 +90,40 @@ export function mergeSessionIntoOnboarding(
   };
 }
 
+export async function persistSignedInUserProfile(profile: OnboardingData, session: AuthSession) {
+  console.log('[auth] persistSignedInUserProfile called, userId:', session.userId);
+  if (!supabase || !session.userId) {
+    console.error('[auth] persistSignedInUserProfile: missing supabase or userId', { supabase: !!supabase, userId: session.userId });
+    return;
+  }
+
+  const metadata = profileMetadata(profile);
+  const { error: authError } = await supabase.auth.updateUser({ data: metadata });
+  if (authError) {
+    console.error('[auth] update user metadata:', authError.message);
+  }
+
+  const profileRow: ProfileRow = {
+    id: session.userId,
+    username: profile.username || profile.displayName || session.email || 'cohort',
+    orb_color: profile.avatar.background,
+    hardware_status: 'offline',
+    current_activity: `${profile.sessionLength}m / ${profile.accountability}`,
+    last_ping: new Date().toISOString(),
+  };
+
+  console.log('[auth] upserting profile row:', profileRow);
+  const { error: profileError } = await supabase
+    .from('profiles')
+    .upsert(profileRow, { onConflict: 'id' });
+
+  if (profileError) {
+    console.error('[auth] upsert profile FAILED:', profileError.message, profileError);
+  } else {
+    console.log('[auth] profile upserted successfully');
+  }
+}
+
 export function getAuthRedirectSession(): AuthSession | null {
   const params = new URLSearchParams(window.location.hash.replace(/^#/, ''));
   const accessToken = params.get('access_token');
@@ -110,21 +153,57 @@ export function hasAuthRedirectParams() {
 }
 
 export async function completeAuthRedirect(): Promise<AuthSession | null> {
-  const hashSession = getAuthRedirectSession();
-  if (hashSession) return hashSession;
-  if (!supabase) return null;
+  console.log('[auth] completeAuthRedirect start, search:', window.location.search, 'hash:', window.location.hash);
+  if (!supabase) return getSavedAuthSession();
 
+  // Implicit flow: access_token arrives in the URL hash
+  const hashParams = new URLSearchParams(window.location.hash.replace(/^#/, ''));
+  const hashAccessToken = hashParams.get('access_token');
+  if (hashAccessToken) {
+    console.log('[auth] implicit flow: access_token found in hash');
+    const refreshToken = hashParams.get('refresh_token') ?? '';
+    const redirectProfile = getRedirectProfile();
+    window.history.replaceState(null, document.title, window.location.pathname);
+
+    const { data, error } = await supabase.auth.setSession({
+      access_token: hashAccessToken,
+      refresh_token: refreshToken,
+    });
+    if (error) {
+      console.error('[auth] setSession from hash failed:', error.message);
+    } else if (data.session) {
+      const savedSession = saveSupabaseSession(data.session, redirectProfile);
+      if (savedSession.profile) {
+        await persistSignedInUserProfile(
+          mergeProfilePartial(savedSession.profile, savedSession),
+          savedSession,
+        );
+      }
+      return savedSession;
+    }
+  }
+
+  // PKCE flow: code arrives in the URL query string
   const code = new URLSearchParams(window.location.search).get('code');
+  console.log('[auth] PKCE flow: code from URL:', code ? 'present' : 'absent');
   if (code) {
     const { data, error } = await supabase.auth.exchangeCodeForSession(code);
-    if (error) throw new Error(error.message);
-    if (data.session) {
+    if (error) {
+      console.error('[auth] code exchange failed:', error.message);
+    } else if (data.session) {
       const redirectProfile = getRedirectProfile();
       if (redirectProfile) {
         await supabase.auth.updateUser({ data: profileMetadataFromPartial(redirectProfile) });
       }
       window.history.replaceState(null, document.title, window.location.pathname);
-      return saveSupabaseSession(data.session, redirectProfile);
+      const savedSession = saveSupabaseSession(data.session, redirectProfile);
+      if (savedSession.profile) {
+        await persistSignedInUserProfile(
+          mergeProfilePartial(savedSession.profile, savedSession),
+          savedSession,
+        );
+      }
+      return savedSession;
     }
   }
 
@@ -138,6 +217,32 @@ export async function restoreSupabaseSession(): Promise<AuthSession | null> {
   if (error || !data.session) return getSavedAuthSession();
 
   return saveSupabaseSession(data.session);
+}
+
+function mergeProfilePartial(profile: Partial<OnboardingData>, session: AuthSession): OnboardingData {
+  return {
+    step: 'auth',
+    displayName: profile.displayName || readableName(session.email?.split('@')[0] ?? '') || 'focus user',
+    username: profile.username || slug(session.email?.split('@')[0] ?? '') || 'cohort',
+    avatar: {
+      skin: profile.avatar?.skin ?? 'rose',
+      hair: profile.avatar?.hair ?? 'soft',
+      eyes: profile.avatar?.eyes ?? 'warm',
+      outfit: profile.avatar?.outfit ?? 'hoodie',
+      accessory: profile.avatar?.accessory ?? 'none',
+      background: profile.avatar?.background ?? 'amber',
+    },
+    sessionLength: profile.sessionLength ?? 50,
+    accountability: profile.accountability ?? 'standard',
+    preferences: {
+      silentPresence: profile.preferences?.silentPresence ?? true,
+      friendNudges: profile.preferences?.friendNudges ?? true,
+      groupSessions: profile.preferences?.groupSessions ?? true,
+    },
+    email: profile.email || session.email || '',
+    authProvider: session.provider,
+    authenticated: true,
+  };
 }
 
 export async function sendEmailMagicLink(email: string, data: OnboardingData) {
@@ -205,6 +310,7 @@ function saveSupabaseSession(
     profile: {
       ...metadataToProfile(session.user.user_metadata, session.user.email),
       ...redirectProfile,
+      email: session.user.email,
     },
   };
 

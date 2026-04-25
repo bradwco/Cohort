@@ -17,6 +17,7 @@ import {
   completeAuthRedirect,
   hasAuthRedirectParams,
   mergeSessionIntoOnboarding,
+  persistSignedInUserProfile,
   signOut,
 } from './lib/supabase_auth';
 
@@ -236,9 +237,10 @@ export default function App() {
 
     let cancelled = false;
     completeAuthRedirect()
-      .then((session) => {
+      .then(async (session) => {
         if (cancelled || !session) return;
         const nextProfile = mergeSessionIntoOnboarding(loadOnboarding(), session);
+        await persistSignedInUserProfile(nextProfile, session);
         saveOnboarding(nextProfile);
         setProfile(nextProfile);
         setAuthenticated(true);
