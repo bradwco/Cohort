@@ -16,25 +16,11 @@ export const ONBOARDING_STEPS = [
     summary: 'Create the small signal that represents you in focus.',
   },
   {
-    id: 'focus',
-    eyebrow: '03 / rhythm',
-    title: 'Focus Setup',
-    label: 'Focus',
-    summary: 'Choose the session rules Cohort should honor.',
-  },
-  {
-    id: 'preview',
-    eyebrow: '04 / preview',
-    title: 'Dashboard Preview',
-    label: 'Preview',
-    summary: 'See how your focus operating system will feel.',
-  },
-  {
     id: 'auth',
-    eyebrow: '05 / sync',
+    eyebrow: '03 / sync',
     title: 'Account',
     label: 'Auth',
-    summary: 'Continue with Google, email, or demo mode.',
+    summary: 'Sign in with Google or email.',
   },
 ] as const;
 

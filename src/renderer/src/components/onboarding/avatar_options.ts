@@ -93,7 +93,7 @@ export const AVATAR_TABS: AvatarTab[] = [
   },
 ];
 
-export const DEFAULT_AVATAR_TAB: AvatarTraitKey = 'hair';
+export const DEFAULT_AVATAR_TAB: AvatarTraitKey = 'skin';
 
 export function getAvatarOption(trait: AvatarTraitKey, id: string) {
   const tab = AVATAR_TABS.find((item) => item.id === trait);
