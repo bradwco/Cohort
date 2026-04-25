@@ -1,5 +1,7 @@
 # claude_agent/
 
+THIS IS WRONG RIGHT NOT THIS IS SUPPOSED TO BE A AGENTVERSE -> GEMMA & VULTR GPU AGENT
+
 Claude API integration — categorization, summaries, and the overlay's "summarize/help" feature.
 
 ## Goes here

@@ -1,9 +1,10 @@
-import { app, BrowserWindow, ipcMain } from 'electron';
+import { app, BrowserWindow } from 'electron';
 import { createMainWindow } from './windows/main_window';
+import { registerIpcHandlers } from './ipc';
+import { destroyMqtt } from './mqtt';
 
 app.whenReady().then(() => {
-  ipcMain.handle('app:ping', () => 'pong');
-
+  registerIpcHandlers();
   createMainWindow();
 
   app.on('activate', () => {
@@ -12,5 +13,6 @@ app.whenReady().then(() => {
 });
 
 app.on('window-all-closed', () => {
+  destroyMqtt();
   if (process.platform !== 'darwin') app.quit();
 });

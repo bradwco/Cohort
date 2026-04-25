@@ -4,6 +4,7 @@ import { resolve } from 'node:path';
 
 export default defineConfig({
   main: {
+    envPrefix: '',
     build: {
       lib: { entry: resolve(__dirname, 'src/main/index.ts') },
     },
