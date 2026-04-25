@@ -24,8 +24,10 @@ function getStoredUserId() {
   try {
     const filePath = path.join(app.getPath('userData'), 'cohort-user.json');
     const data = JSON.parse(fs.readFileSync(filePath, 'utf8'));
+    console.log('[userId] read from file:', data.userId);
     return data.userId ?? null;
-  } catch {
+  } catch (e) {
+    console.warn('[userId] file read failed:', e.message, '— using env.USER_ID');
     return env.USER_ID ?? null;
   }
 }
@@ -40,6 +42,7 @@ ipcMain.handle('get-config', () => ({
   LOCAL_VLM_MODEL:   env.LOCAL_VLM_MODEL   || 'moondream',
   SUPABASE_URL:      env.SUPABASE_URL      || '',
   SUPABASE_ANON_KEY: env.SUPABASE_ANON_KEY || '',
+  USER_ID:           getStoredUserId()     || '',
 }));
 
 ipcMain.handle('create-session', async (_event, { plannedDurationMinutes, workflowGroup }) => {
@@ -170,6 +173,7 @@ function createOverlay() {
   win.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
   win.setIgnoreMouseEvents(true, { forward: true });
   win.loadFile(path.join(__dirname, 'index.html'));
+  win.webContents.openDevTools({ mode: 'detach' });
 }
 
 app.whenReady().then(createOverlay);

@@ -1,5 +1,5 @@
 import { createClient, type Session } from '@supabase/supabase-js';
-import type { OnboardingData } from '../state/onboarding';
+import type { OnboardingData, AvatarTraits } from '../state/onboarding';
 
 const SUPABASE_URL = (import.meta.env.VITE_SUPABASE_URL ??
   import.meta.env.SUPABASE_URL) as string | undefined;
@@ -24,6 +24,7 @@ type ProfileRow = {
   hardware_status: 'docked' | 'offline';
   current_activity: string;
   last_ping: string;
+  avatar?: AvatarTraits | null;
 };
 
 export const AUTH_SESSION_KEY = 'cohort:auth-session:v1';
@@ -113,6 +114,7 @@ export async function persistSignedInUserProfile(profile: OnboardingData, sessio
     hardware_status: 'offline',
     current_activity: `${profile.sessionLength}m / ${profile.accountability}`,
     last_ping: new Date().toISOString(),
+    avatar: profile.avatar,
   };
 
   console.log('[auth] upserting profile row:', profileRow);

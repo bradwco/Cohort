@@ -59,13 +59,7 @@
           <circle cx="2"  cy="8" r="1.5"/><circle cx="8"  cy="8" r="1.5"/><circle cx="14" cy="8" r="1.5"/>
         </svg>
       </div>
-      <div class="avatars">
-        <div class="avatar status-active" style="--c: #c19a7a;">A<span class="name">Alex Chen</span></div>
-        <div class="avatar status-idle"   style="--c: #9a8770;">M<span class="name">Maya Rodriguez</span></div>
-        <div class="avatar status-active" style="--c: #8a7d6a;">J<span class="name">Jamie Park</span></div>
-        <div class="avatar status-off"    style="--c: #b08568;">S<span class="name">Sam Taylor</span></div>
-        <div class="avatar status-active" style="--c: #7d8278;">R<span class="name">Riley Singh</span></div>
-      </div>
+      <div class="avatars" id="avatars"></div>
       <div class="divider"></div>
       <div class="timer" id="timer">25:00</div>
       <button class="stop" id="stop" aria-label="Stop session" title="Stop">
@@ -75,6 +69,7 @@
       </button>
     </div>
 
+    <script src="ai/pixel_avatar.js"></script>
     <script src="ai/gemini.js"></script>
     <script src="ai/classifier.js"></script>
     <script>
@@ -100,6 +95,38 @@
           console.log('[session] created:', sessionId);
         } catch (e) {
           console.warn('[session] failed to create:', e.message);
+        }
+      })();
+
+      (async () => {
+        try {
+          const cfg = await window.electronAPI.getConfig();
+          console.log('[avatar] config userId:', cfg.USER_ID, 'url:', cfg.SUPABASE_URL);
+          if (!cfg.SUPABASE_URL || !cfg.SUPABASE_ANON_KEY || !cfg.USER_ID) {
+            console.warn('[avatar] missing config fields');
+            return;
+          }
+          const url = cfg.SUPABASE_URL.replace(/\/$/, '');
+          const resp = await fetch(
+            `${url}/rest/v1/profiles?id=eq.${cfg.USER_ID}&select=*`,
+            { headers: { 'apikey': cfg.SUPABASE_ANON_KEY, 'Authorization': `Bearer ${cfg.SUPABASE_ANON_KEY}` } },
+          );
+          console.log('[avatar] fetch status:', resp.status);
+          if (!resp.ok) { console.warn('[avatar] fetch failed:', await resp.text()); return; }
+          const rows = await resp.json();
+          const profile = rows[0];
+          console.log('[avatar] profile:', JSON.stringify(profile));
+          if (!profile?.avatar) { console.warn('[avatar] no avatar in profile'); return; }
+          const avatarsEl = document.getElementById('avatars');
+          const div = document.createElement('div');
+          div.className = 'avatar status-active';
+          div.style.cssText = 'background:transparent;';
+          div.innerHTML = window.renderPixelAvatar(profile.avatar)
+            + `<span class="name">${profile.username ?? 'me'}</span>`;
+          avatarsEl.appendChild(div);
+          console.log('[avatar] rendered for', profile.username);
+        } catch (e) {
+          console.error('[avatar] error:', e);
         }
       })();
 
