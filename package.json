@@ -9,6 +9,8 @@
     "preview": "node scripts/run.mjs electron-vite preview",
     "start": "node scripts/run.mjs electron .",
     "dev:overlay": "node scripts/run.mjs electron overlay_standalone/main.cjs",
+    "ollama:proxy": "node scripts/ollama_proxy.mjs",
+    "ollama:tunnel": "cloudflared tunnel --url http://127.0.0.1:8787",
     "typecheck": "tsc -b"
   },
   "devDependencies": {
