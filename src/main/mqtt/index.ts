@@ -1,10 +1,11 @@
 import mqtt, { MqttClient } from 'mqtt';
 import { BrowserWindow } from 'electron';
-import { updateProfile, startSession, logActivity } from '../supabase';
-import { recordPhoneLift, startSessionMetrics } from '../session_metrics';
+import { updateProfile, startSession, endSession as finishSupabaseSession, logActivity } from '../supabase';
+import { calculateFlowScore, finishSessionMetrics, recordPhoneLift, startSessionMetrics } from '../session_metrics';
 
 type OrbPayload = {
   status?: 'docked' | 'undocked' | 'redocked' | 'offline';
+  event?: 'end_session';
   duration?: number;
   workflowGroup?: string;
   totalPauseMs?: number;
@@ -164,6 +165,11 @@ async function handleIncoming(topic: string, raw: string): Promise<void> {
 async function handleOwnOrbState(payload: OrbPayload): Promise<void> {
   const status = payload.status;
 
+  if (payload.event === 'end_session') {
+    await endHardwareSession();
+    return;
+  }
+
   if (status === 'docked') {
     const duration = payload.plannedDurationMinutes ?? payload.duration ?? 60;
     const workflowGroup = payload.workflowGroup ?? 'Focus Session';
@@ -211,7 +217,10 @@ async function handleOwnOrbState(payload: OrbPayload): Promise<void> {
       await logActivity(activeSessionId, currentUserId, 'hardware_break', { sensor: 'undocked' });
     }
 
-    await updateProfile(currentUserId!, { hardware_status: 'offline' });
+    await updateProfile(currentUserId!, {
+      hardware_status: 'offline',
+      focus_state: 'idle',
+    });
     const ownPayload = {
       status: 'undocked',
       pauseStart,
@@ -222,6 +231,7 @@ async function handleOwnOrbState(payload: OrbPayload): Promise<void> {
     };
     broadcastToRenderer('mqtt:own-state', ownPayload);
     publishOwnState({ ...ownPayload, origin: 'desktop-sim' });
+    onOfflineCallback?.();
     return;
   }
 
@@ -256,6 +266,43 @@ async function handleOwnOrbState(payload: OrbPayload): Promise<void> {
     publishOwnState({ ...ownPayload, origin: 'desktop-sim' });
     onOfflineCallback?.();
   }
+}
+
+async function endHardwareSession(): Promise<void> {
+  const endedSessionId = activeSessionId;
+  let finalTotalPauseMs = totalPauseMs;
+
+  if (pauseStart !== null) {
+    finalTotalPauseMs += Date.now() - pauseStart;
+  }
+
+  if (endedSessionId) {
+    const metrics = finishSessionMetrics(endedSessionId);
+    await finishSupabaseSession(
+      endedSessionId,
+      Math.round(finalTotalPauseMs / 60000),
+      metrics ? calculateFlowScore(metrics) : 0,
+      'Ended from hardware',
+      undefined,
+      metrics ?? undefined,
+    );
+  }
+
+  if (currentUserId) {
+    await updateProfile(currentUserId, { hardware_status: 'offline' });
+  }
+
+  pauseStart = null;
+  totalPauseMs = 0;
+  activeSessionId = null;
+  activeSessionStartedAt = null;
+  activeWorkflowGroup = null;
+  activePlannedDurationMinutes = null;
+
+  const ownPayload = { status: 'offline', event: 'end_session' };
+  broadcastToRenderer('mqtt:own-state', ownPayload);
+  publishOwnState({ ...ownPayload, origin: 'desktop-sim' });
+  onOfflineCallback?.();
 }
 
 async function handleSimulatedFriendState(userId: string, payload: OrbPayload): Promise<void> {

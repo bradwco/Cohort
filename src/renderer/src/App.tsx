@@ -9,7 +9,6 @@ import { Sidebar } from './shared_ui/sidebar';
 import { Header } from './shared_ui/header';
 import { Telemetry } from './shared_ui/telemetry';
 import { GrainOverlay } from './shared_ui/grain_overlay';
-import { HwSimulator } from './shared_ui/hw_simulator';
 import type { TelemetryEvent, ViewId } from './shared_ui/types';
 import { loadOnboarding, saveOnboarding, type OnboardingData } from './state/onboarding';
 import { OnboardingPage } from './onboarding/page';
@@ -81,8 +80,8 @@ function DashboardApp({
   const [liftCount, setLiftCount] = useState(0);
   const [totalPauseMs, setTotalPauseMs] = useState(0);
   const [currentWorkflow, setCurrentWorkflow] = useState('');
+  const [hardwareConnected, setHardwareConnected] = useState(false);
 
-  const [activeGroup, setActiveGroup] = useState<string | null>(null);
   const [sessionPausedAt, setSessionPausedAt] = useState<string | null>(null);
 
   const pauseBudgetMinutes =
@@ -169,6 +168,15 @@ function DashboardApp({
     return () => { cleanup(); };
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
+  useEffect(() => {
+    if (!window.api?.onHardwareSerialStatus) return;
+    const cleanup = window.api.onHardwareSerialStatus((raw) => {
+      const data = raw as { connected?: boolean };
+      setHardwareConnected(Boolean(data.connected));
+    });
+    return () => { cleanup(); };
+  }, []);
+
   function handleSessionEnd() {
     setOrbStatus('offline');
     setSecondsElapsed(0);
@@ -232,14 +240,13 @@ function DashboardApp({
       }}
     >
       <GrainOverlay />
-      <HwSimulator
-        userId={userId}
-        activeGroup={activeGroup}
-        onSelectGroup={setActiveGroup}
-        onSessionEnd={handleSessionEnd}
-      />
 
-      <Sidebar activeView={activeView} onSelect={setActiveView} profile={currentProfile} />
+      <Sidebar
+        activeView={activeView}
+        onSelect={setActiveView}
+        profile={currentProfile}
+        hardwareConnected={hardwareConnected}
+      />
 
       <main
         className="min-h-screen flex-1 transition-[margin] duration-300"

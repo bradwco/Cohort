@@ -54,6 +54,8 @@ const api = {
     ipcRenderer.invoke(CH.MQTT_PUBLISH_COMMAND, userId, command),
   subscribeFriends: (friendIds: string[]) => ipcRenderer.invoke(CH.MQTT_SUBSCRIBE_FRIENDS, friendIds),
   getPauseStats: () => ipcRenderer.invoke(CH.MQTT_PAUSE_STATS),
+  sendHardwareSerialCommand: (command: string) =>
+    ipcRenderer.invoke(CH.HARDWARE_SERIAL_COMMAND, command),
 
   // Push listeners
   onMqttConnected: (cb: (data: unknown) => void) => {
@@ -75,6 +77,11 @@ const api = {
     const h = (_e: Electron.IpcRendererEvent, data: unknown) => cb(data);
     ipcRenderer.on(PUSH.FRIEND_NUDGE, h);
     return () => ipcRenderer.off(PUSH.FRIEND_NUDGE, h);
+  },
+  onHardwareSerialStatus: (cb: (data: unknown) => void) => {
+    const h = (_e: Electron.IpcRendererEvent, data: unknown) => cb(data);
+    ipcRenderer.on(PUSH.HARDWARE_SERIAL_STATUS, h);
+    return () => ipcRenderer.off(PUSH.HARDWARE_SERIAL_STATUS, h);
   },
 
   // Persist userId to shared file so overlay_standalone can read it

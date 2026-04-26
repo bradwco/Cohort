@@ -46,6 +46,7 @@ import {
   recordFocusState,
   startSessionMetrics,
 } from '../session_metrics';
+import { initHardwareSerial, sendFocusStateToHardwareSerial, sendHardwareSerialCommand } from '../hardware_serial';
 
 let activePlannedDurationMinutes = 50;
 
@@ -119,6 +120,7 @@ export function registerIpcHandlers(options: IpcHandlerOptions = {}): void {
   ipcMain.handle("pause-session", () => {
     const pausedAt = new Date().toISOString();
     void markPaused(pausedAt);
+    sendHardwareSerialCommand('P');
 
     for (const win of BrowserWindow.getAllWindows()) {
       win.webContents.send(PUSH.SESSION_PAUSED, { pausedAt });
@@ -128,6 +130,7 @@ export function registerIpcHandlers(options: IpcHandlerOptions = {}): void {
   // Resume session
   ipcMain.handle(CH.SESSION_RESUME, async () => {
     const result = await resumePause({ openOverlay: false });
+    sendHardwareSerialCommand('W');
     options.onResumeSession?.();
     return result;
   });
@@ -156,6 +159,7 @@ export function registerIpcHandlers(options: IpcHandlerOptions = {}): void {
     const metrics = finishSessionMetrics(sessionId);
     await endSession(sessionId, pauseMinutes, metrics ? calculateFlowScore(metrics) : flowScore, aiSummary, undefined, metrics ?? undefined);
     setActiveSessionId(null);
+    sendHardwareSerialCommand('O');
   });
 
   ipcMain.handle(CH.SESSION_HISTORY, (_e, userId) =>
@@ -181,7 +185,10 @@ export function registerIpcHandlers(options: IpcHandlerOptions = {}): void {
   );
 
   // MQTT
-  ipcMain.handle(CH.MQTT_INIT, (_e, userId) => initMqtt(userId));
+  ipcMain.handle(CH.MQTT_INIT, (_e, userId) => {
+    initMqtt(userId);
+    void initHardwareSerial(userId);
+  });
   ipcMain.handle(CH.MQTT_PUBLISH_COMMAND, (_e, userId, cmd) =>
     publishCommand(userId, cmd),
   );
@@ -189,6 +196,10 @@ export function registerIpcHandlers(options: IpcHandlerOptions = {}): void {
     subscribeFriends(ids),
   );
   ipcMain.handle(CH.MQTT_PAUSE_STATS, () => getPauseStats());
+
+  ipcMain.handle(CH.HARDWARE_SERIAL_COMMAND, (_e, command: string) => {
+    sendHardwareSerialCommand(command);
+  });
 
   // Hardware simulation
   ipcMain.handle(CH.HW_SIMULATE, (_e, userId, payload) =>
@@ -275,6 +286,7 @@ export function registerIpcHandlers(options: IpcHandlerOptions = {}): void {
     if (userId) await updateProfile(userId, { hardware_status: 'offline' });
     setActiveSessionId(null);
     resetPauseStats();
+    sendHardwareSerialCommand('O');
     for (const win of BrowserWindow.getAllWindows()) {
       win.webContents.send('mqtt:own-state', { status: 'offline' });
     }
@@ -292,6 +304,7 @@ export function registerIpcHandlers(options: IpcHandlerOptions = {}): void {
     const userId = getOverlayUserId();
     if (!userId) return;
     recordFocusState(state);
+    sendFocusStateToHardwareSerial(state);
     return updateProfile(userId, {
       focus_state: state as 'productive' | 'distracted' | 'idle' | 'offline',
     });
