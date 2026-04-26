@@ -356,6 +356,9 @@
       document.getElementById("stop").addEventListener("click", async () => {
         try {
           window.electronAPI.updateFocusState("idle").catch(() => {});
+          if (gemini?.history?.length) {
+            await window.electronAPI.saveConversationHistory(gemini.history).catch(() => {});
+          }
           await window.electronAPI.pauseSession();
         } catch (e) {
           console.warn("[session] pause failed:", e.message);
