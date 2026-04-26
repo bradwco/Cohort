@@ -1,7 +1,7 @@
 import type { ReactElement } from 'react';
 import { PixelOrbMini } from '../orb_character/pixel_orb_mini';
 import { PixelAvatar } from '../components/onboarding/pixel_avatar';
-import { DashboardIcon, FriendsIcon, HistoryIcon, OrbIcon, SettingsIcon } from './icons';
+import { DashboardIcon, FriendsIcon, HistoryIcon, SettingsIcon } from './icons';
 import { cn } from './cn';
 import type { ViewId } from './types';
 import type { OnboardingData } from '../state/onboarding';
@@ -16,7 +16,6 @@ const NAV: NavItem[] = [
   { id: 'dashboard', label: 'Dashboard', Icon: DashboardIcon },
   { id: 'history', label: 'History', Icon: HistoryIcon },
   { id: 'friends', label: 'Friends', Icon: FriendsIcon },
-  { id: 'orb', label: 'Orb', Icon: OrbIcon },
   { id: 'settings', label: 'Settings', Icon: SettingsIcon },
 ];
 

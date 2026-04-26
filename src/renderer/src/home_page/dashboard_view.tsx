@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { PixelOrb } from '../orb_character/pixel_orb';
 import { PixelOrbMini } from '../orb_character/pixel_orb_mini';
 import { PixelAvatar } from '../components/onboarding/pixel_avatar';
@@ -28,10 +28,37 @@ type LiveState = {
 type DBSession = {
   id: string;
   started_at: string;
+  ended_at?: string | null;
   duration_mins?: number;
   workflow_group?: string;
-  flow_score?: number;
+  flow_score?: number | null;
+  total_work_duration_seconds?: number;
+  phone_lift_count?: number;
 };
+
+function formatLastSessionDuration(s: DBSession): string {
+  const totalSeconds =
+    s.total_work_duration_seconds ??
+    (s.ended_at ? Math.max(0, Math.round((Date.parse(s.ended_at) - Date.parse(s.started_at)) / 1000)) : null);
+  if (totalSeconds == null) return s.duration_mins != null ? `${s.duration_mins}m` : '--';
+  const hours = Math.floor(totalSeconds / 3600);
+  const minutes = Math.floor((totalSeconds % 3600) / 60);
+  if (hours > 0) return `${hours}h ${minutes}m`;
+  if (minutes > 0) return `${minutes}m`;
+  return `${totalSeconds}s`;
+}
+
+function formatLastSessionWhen(startedAt: string): string {
+  const ms = Date.now() - Date.parse(startedAt);
+  if (!Number.isFinite(ms) || ms < 0) return '';
+  const minutes = Math.floor(ms / 60000);
+  if (minutes < 1) return 'just now';
+  if (minutes < 60) return `${minutes}m ago`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return `${hours}h ago`;
+  const days = Math.floor(hours / 24);
+  return days === 1 ? 'yesterday' : `${days}d ago`;
+}
 
 function computeStreak(sessions: DBSession[]): number {
   if (sessions.length === 0) return 0;
@@ -65,6 +92,13 @@ function formatElapsed(startedAt?: string): string {
   return `${minutes}m`;
 }
 
+function formatPause(ms: number): string {
+  const totalSeconds = Math.floor(ms / 1000);
+  const minutes = Math.floor(totalSeconds / 60);
+  const seconds = totalSeconds % 60;
+  return `${minutes}:${String(seconds).padStart(2, '0')}`;
+}
+
 type Props = {
   userId: string | null;
   profile: OnboardingData;
@@ -74,10 +108,6 @@ type Props = {
   liftCount: number;
   totalPauseMs: number;
   currentWorkflow: string;
-  sessionPausedAt: string | null;
-  pauseBudgetMinutes: number;
-  onResumeSession: () => void;
-  onEndSession: () => void;
 };
 
 type AgentResponse = {
@@ -94,15 +124,8 @@ export function DashboardView({
   liftCount,
   totalPauseMs,
   currentWorkflow,
-  sessionPausedAt,
-  pauseBudgetMinutes,
-  onResumeSession,
-  onEndSession,
 }: Props) {
   const sessionActive = orbStatus !== 'offline';
-  const isPaused = sessionActive && sessionPausedAt !== null;
-  const goalSecs = profile.sessionLength * 60;
-  const goalReached = sessionActive && secondsElapsed >= goalSecs;
   const flowScore = sessionActive
     ? computeFlowScore(liftCount, totalPauseMs, profile.sessionLength)
     : null;
@@ -113,12 +136,24 @@ export function DashboardView({
   const [, setNowTick] = useState(Date.now());
   const [agentInsight, setAgentInsight] = useState('Complete your first session to receive a personalized insight.');
   const [insightLoading, setInsightLoading] = useState(false);
+  const insightInFlight = useRef(false);
+  const insightBackoffUntil = useRef(0);
+  const INSIGHT_FAILURE_BACKOFF_MS = 30_000;
+  const INSIGHT_DEBOUNCE_MS = 1_500;
 
   const streak = computeStreak(sessions);
-  const orbColor = isPaused ? '#7CB0E8'
-    : orbStatus === 'docked' ? '#E8A87C'
+  const lastSession = !sessionActive ? sessions[0] ?? null : null;
+  const hasLastSession = lastSession != null;
+  const orbColor = orbStatus === 'docked' ? '#E8A87C'
     : orbStatus === 'undocked' ? '#7CB0E8'
+    : hasLastSession ? '#E8A87C'
     : '#3a3d4a';
+
+  useEffect(() => {
+    if (!userId || !window.api) return;
+    if (orbStatus !== 'offline') return;
+    void window.api.getSessionHistory(userId).then((rows) => setSessions((rows as DBSession[]) ?? []));
+  }, [userId, orbStatus]);
 
   useEffect(() => {
     if (!userId || !window.api) return;
@@ -171,44 +206,58 @@ export function DashboardView({
       return;
     }
 
-    let cancelled = false;
-    setInsightLoading(true);
+    if (insightInFlight.current) return;
+    if (Date.now() < insightBackoffUntil.current) return;
 
-    void window.api.queryAgent({
-      intent: 'dashboard_insight',
-      userId,
-      context: {
-        session_active: sessionActive,
-        current_workflow: currentWorkflow || null,
-        lift_count: liftCount,
-        total_pause_minutes: Math.floor(totalPauseMs / 60000),
-        planned_duration_minutes: profile.sessionLength,
-        recent_session_count: sessions.length,
-        streak_days: streak,
-      },
-    }).then((response) => {
+    let cancelled = false;
+    const debounceId = window.setTimeout(() => {
       if (cancelled) return;
-      const data = response as AgentResponse;
-      const text = data.text?.trim();
-      if (text) {
-        setAgentInsight(text);
-        return;
-      }
-      if (sessions.length === 0) {
-        setAgentInsight('Complete your first session to receive a personalized insight.');
-        return;
-      }
-      setAgentInsight(data.error ? `agent unavailable: ${data.error}` : 'agent unavailable');
-    }).catch((error) => {
-      if (cancelled) return;
-      const message = error instanceof Error ? error.message : String(error);
-      setAgentInsight(`agent unavailable: ${message}`);
-    }).finally(() => {
-      if (!cancelled) setInsightLoading(false);
-    });
+      insightInFlight.current = true;
+      setInsightLoading(true);
+
+      void window.api!.queryAgent({
+        intent: 'dashboard_insight',
+        userId,
+        context: {
+          session_active: sessionActive,
+          current_workflow: currentWorkflow || null,
+          lift_count: liftCount,
+          total_pause_minutes: Math.floor(totalPauseMs / 60000),
+          planned_duration_minutes: profile.sessionLength,
+          recent_session_count: sessions.length,
+          streak_days: streak,
+        },
+      }).then((response) => {
+        if (cancelled) return;
+        const data = response as AgentResponse;
+        const text = data.text?.trim();
+        if (text) {
+          setAgentInsight(text);
+          insightBackoffUntil.current = 0;
+          return;
+        }
+        if (sessions.length === 0) {
+          setAgentInsight('Complete your first session to receive a personalized insight.');
+          return;
+        }
+        if (data.error) {
+          insightBackoffUntil.current = Date.now() + INSIGHT_FAILURE_BACKOFF_MS;
+        }
+        setAgentInsight(data.error ? `agent unavailable: ${data.error}` : 'agent unavailable');
+      }).catch((error) => {
+        if (cancelled) return;
+        const message = error instanceof Error ? error.message : String(error);
+        insightBackoffUntil.current = Date.now() + INSIGHT_FAILURE_BACKOFF_MS;
+        setAgentInsight(`agent unavailable: ${message}`);
+      }).finally(() => {
+        insightInFlight.current = false;
+        if (!cancelled) setInsightLoading(false);
+      });
+    }, INSIGHT_DEBOUNCE_MS);
 
     return () => {
       cancelled = true;
+      window.clearTimeout(debounceId);
     };
   }, [
     currentWorkflow,
@@ -226,156 +275,133 @@ export function DashboardView({
     return live?.status === 'docked' || live?.status === 'undocked' || f.hardware_status === 'docked';
   });
 
+  const primaryLabel = sessionActive ? 'Elapsed time' : hasLastSession ? 'Last session' : 'No session yet';
+  const primaryValue = sessionActive
+    ? fmt(secondsElapsed)
+    : hasLastSession
+      ? formatLastSessionDuration(lastSession!)
+      : '--:--';
+  const sessionContext = sessionActive
+    ? currentWorkflow || 'focus session'
+    : hasLastSession
+      ? lastSession!.workflow_group ?? 'focus session'
+      : 'Dock your phone to begin.';
+  const sessionHint = sessionActive
+    ? orbStatus === 'undocked'
+      ? 'Put your phone back on the dock to resume focus.'
+      : 'Keep the phone docked. Cohort tracks lifts and pause time automatically.'
+    : hasLastSession
+      ? `Finished ${formatLastSessionWhen(lastSession!.started_at)}. Dock your phone when you are ready for another round.`
+      : 'Start by placing your phone on the dock. The timer begins when hardware reports docked.';
+  const liftMetric = sessionActive
+    ? String(liftCount)
+    : hasLastSession && lastSession!.phone_lift_count != null
+      ? String(lastSession!.phone_lift_count)
+      : '--';
+
   return (
-    <div>
-      <div className="mb-6 rounded-md border border-line bg-bg-deeper/60">
-        <div className="flex min-h-[430px] flex-col items-center justify-center px-8 py-14 text-center">
-          <PixelOrb color={orbColor} size={196} glow={0} />
-
-          <div className="mt-8 font-mono text-[10px] uppercase tracking-[0.24em] text-ink-faint">
-            {sessionActive
-              ? isPaused
-                ? 'session paused'
-                : orbStatus === 'undocked'
-                  ? 'paused — phone lifted'
-                  : goalReached
-                    ? `goal reached — ${currentWorkflow || 'keep going'}`
-                    : `focused — ${currentWorkflow || 'session active'}`
-              : 'waiting for hardware'}
-          </div>
-
-          <div
-            className={cn(
-              'mt-3 font-serif text-[88px] font-light italic leading-none tracking-[-0.04em] tabular-nums',
-              !sessionActive && 'text-ink-faint',
-              sessionActive && !isPaused && !goalReached && 'text-ink',
-              isPaused && 'text-cool-blue',
-              goalReached && !isPaused && 'text-amber',
-            )}
-          >
-            {sessionActive ? fmt(secondsElapsed) : '--:--'}
-          </div>
-
-          <div className="mt-3 font-mono text-[11px] uppercase tracking-[0.14em] text-ink-faint">
-            {sessionActive
-              ? `elapsed · goal ${profile.sessionLength}m`
-              : 'dock your phone to start a session'}
-          </div>
-
-          {goalReached && !isPaused && (
-            <div className="mt-3 rounded border border-amber/40 bg-amber/10 px-4 py-2 font-mono text-[10px] uppercase tracking-[0.12em] text-amber">
-              session goal reached ✓
+    <div className="grid h-[calc(100vh-148px)] min-h-0 grid-cols-[minmax(0,1fr)_320px] gap-5 overflow-hidden pb-5">
+      <div className="min-h-0">
+        <section className="h-full min-h-0 rounded-md border border-line bg-bg-deeper/60 p-5">
+          <div className="grid h-full min-h-0 grid-rows-[auto_minmax(0,1fr)_auto] gap-5">
+            <div className="max-w-xl">
+              <div className="font-mono text-[10px] uppercase tracking-[0.18em] text-ink-faint">
+                <strong className="text-amber">{primaryLabel}</strong> / {sessionContext}
+              </div>
+              <p className="mt-3 font-serif text-lg italic leading-snug text-ink-dim">
+                <strong className="text-ink">{sessionActive ? 'Stay with it.' : 'Start here.'}</strong>{' '}
+                {sessionHint}
+              </p>
             </div>
-          )}
 
-          {sessionActive && (
-            <div className="mt-4 flex items-center gap-3 font-mono text-[11px] tracking-wide text-ink-dim">
-              <span>
-                lifts <strong className={liftCount > 0 ? 'text-cool-blue' : 'text-ink-faint'}>{liftCount}</strong>
-              </span>
-              <span className="text-ink-faint">/</span>
-              <span>
-                pause used{' '}
-                <strong className={totalPauseMs > 0 ? 'text-amber' : 'text-ink-faint'}>
-                  {Math.floor(totalPauseMs / 60000)}m
-                </strong>
-              </span>
-              {flowScore != null && (
-                <>
-                  <span className="text-ink-faint">/</span>
-                  <span>
-                    flow <strong className="text-amber">{flowScore}</strong>
-                  </span>
-                </>
-              )}
+            <div className="flex min-w-0 flex-col items-center justify-center text-center">
+              <PixelOrb color={orbColor} size={196} glow={0} />
+              <div
+                className={cn(
+                  'mt-6 font-serif text-[clamp(60px,7.5vw,98px)] font-light italic leading-none tabular-nums',
+                  sessionActive ? 'text-ink' : hasLastSession ? 'text-ink-dim' : 'text-ink-faint',
+                )}
+              >
+                {primaryValue}
+              </div>
             </div>
-          )}
 
-          {sessionPausedAt && sessionActive && (
-            <PauseBudgetBanner
-              pausedAt={sessionPausedAt}
-              budgetMinutes={pauseBudgetMinutes}
-              onResume={onResumeSession}
-            />
-          )}
-
-          {sessionActive && (
-            <button
-              onClick={onEndSession}
-              className="mt-5 rounded border border-line-mid px-5 py-2 font-mono text-[10px] uppercase tracking-[0.12em] text-ink-faint transition-colors hover:border-red-500/40 hover:text-red-400"
-            >
-              End Session
-            </button>
-          )}
-
-        </div>
+            <div className="border-t border-line pt-4">
+              <div className="mb-3 font-mono text-[10px] uppercase tracking-[0.16em] text-ink-faint">
+                live readout
+              </div>
+              <div className="grid grid-cols-3 gap-3">
+                <DetailMetric
+                  label="Orb state"
+                  value={orbStatus}
+                  tone={sessionActive ? 'amber' : 'muted'}
+                  active={sessionActive}
+                />
+                <DetailMetric
+                  label="Pause used"
+                  value={sessionActive ? formatPause(totalPauseMs) : '--'}
+                  tone={totalPauseMs > 0 ? 'amber' : 'muted'}
+                />
+                <DetailMetric
+                  label="Phone lifts"
+                  value={liftMetric}
+                  tone={liftCount > 0 ? 'blue' : 'muted'}
+                />
+              </div>
+            </div>
+          </div>
+        </section>
       </div>
 
-      <div className="grid grid-cols-[minmax(0,1fr)_300px] gap-6">
-        <div className="rounded-md border border-line bg-bg-deeper/60 p-4">
+      <aside className="flex min-h-0 flex-col gap-4">
+        <section className="min-h-0 flex-1 rounded-md border border-line bg-bg-deeper/60 p-4">
           <div className="mb-3 flex items-baseline justify-between border-b border-line pb-2.5">
-            <div className="font-serif text-base italic">session pulse</div>
+            <div className="font-serif text-base italic">friends online</div>
             <div className="font-mono text-[10px] text-amber">
-              {streak > 0 ? `${streak} day streak` : 'no streak yet'}
+              {activeFriends.length} active
             </div>
           </div>
-          <div className="grid grid-cols-3 gap-3">
-            <Stat label="orb" value={orbStatus} active={sessionActive} />
-            <Stat label="flow score" value={flowScore != null ? String(flowScore) : '--'} />
-            <Stat label="lifts" value={sessionActive ? String(liftCount) : '--'} />
-          </div>
-        </div>
-
-        <div className="flex flex-col gap-4">
-          <div className="rounded-md border border-line bg-bg-deeper/60 p-4">
-            <div className="mb-3 flex items-baseline justify-between border-b border-line pb-2.5">
-              <div className="font-serif text-base italic">friends online</div>
-              <div className="font-mono text-[10px] text-amber">
-                {activeFriends.length} active
-              </div>
+          {activeFriends.length === 0 ? (
+            <div className="flex h-[calc(100%-36px)] items-center justify-center text-center font-mono text-[10px] text-ink-faint">
+              no friends online right now
             </div>
-            {activeFriends.length === 0 ? (
-              <div className="py-4 text-center font-mono text-[10px] text-ink-faint">
-                no friends online right now
-              </div>
-            ) : (
-              <div className="flex flex-col gap-2">
-                {activeFriends.slice(0, 5).map((f) => {
-                  const live = liveStates.get(f.id);
-                  const activity = live?.workflowGroup ?? f.current_activity ?? 'in session';
-                  const elapsedFrom = live?.sessionStartedAt ?? (f.hardware_status === 'docked' ? f.last_ping : undefined);
-                  return (
-                    <div key={f.id} className="flex items-center gap-2.5">
-                      <ProfileAvatar profile={f} color={f.orb_color ?? '#E8A87C'} pulse />
-                      <div className="min-w-0 flex-1">
-                        <div className="truncate font-serif text-sm italic">{f.username}</div>
-                        <div className="truncate font-mono text-[9px] text-ink-faint">
-                          {activity}
-                        </div>
-                        <div className="font-mono text-[9px] text-amber">
-                          {formatElapsed(elapsedFrom)}
-                        </div>
+          ) : (
+            <div className="flex max-h-full flex-col gap-2 overflow-hidden">
+              {activeFriends.slice(0, 6).map((f) => {
+                const live = liveStates.get(f.id);
+                const activity = live?.workflowGroup ?? f.current_activity ?? 'in session';
+                const elapsedFrom = live?.sessionStartedAt ?? (f.hardware_status === 'docked' ? f.last_ping : undefined);
+                return (
+                  <div key={f.id} className="flex items-center gap-2.5 rounded border border-line/70 bg-white/[0.02] px-2.5 py-2">
+                    <ProfileAvatar profile={f} color={f.orb_color ?? '#E8A87C'} pulse />
+                    <div className="min-w-0 flex-1">
+                      <div className="truncate font-serif text-sm italic">{f.username}</div>
+                      <div className="truncate font-mono text-[9px] text-ink-faint">
+                        {activity}
+                      </div>
+                      <div className="font-mono text-[9px] text-amber">
+                        {formatElapsed(elapsedFrom)}
                       </div>
                     </div>
-                  );
-                })}
-              </div>
-            )}
-          </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </section>
 
-          <div className="rounded-md border border-line bg-bg-deeper/60 p-4">
-            <div className="mb-2.5 flex items-center gap-1.5">
-              <SparkIcon />
-              <span className="font-mono text-[9px] uppercase tracking-[0.14em] text-amber">
-                gemma / insight
-              </span>
-            </div>
-            <div className="font-serif text-sm italic leading-relaxed text-ink-dim">
-              {insightLoading ? 'asking gemma...' : agentInsight}
-            </div>
+        <section className="rounded-md border border-line bg-bg-deeper/60 p-4">
+          <div className="mb-2.5 flex items-center gap-1.5">
+            <SparkIcon />
+            <span className="font-mono text-[9px] uppercase tracking-[0.14em] text-amber">
+              gemma / insight
+            </span>
           </div>
-        </div>
-      </div>
+          <div className="max-h-28 overflow-hidden font-serif text-sm italic leading-relaxed text-ink-dim">
+            {insightLoading ? 'asking gemma...' : agentInsight}
+          </div>
+        </section>
+      </aside>
     </div>
   );
 }
@@ -400,61 +426,34 @@ function ProfileAvatar({
   return <PixelOrbMini color={color} pulse={pulse} />;
 }
 
-function PauseBudgetBanner({
-  pausedAt,
-  budgetMinutes,
-  onResume,
+function DetailMetric({
+  label,
+  value,
+  tone = 'muted',
+  active = false,
 }: {
-  pausedAt: string;
-  budgetMinutes: number;
-  onResume: () => void;
+  label: string;
+  value: string;
+  tone?: 'amber' | 'blue' | 'muted';
+  active?: boolean;
 }) {
-  const elapsedMs = Date.now() - Date.parse(pausedAt);
-  const elapsedMin = Math.floor(elapsedMs / 60000);
-  const elapsedSec = Math.floor((elapsedMs % 60000) / 1000);
-  const budgetMs = budgetMinutes * 60 * 1000;
-  const remainingMs = Math.max(0, budgetMs - elapsedMs);
-  const remainingMin = Math.floor(remainingMs / 60000);
-  const remainingSec = Math.floor((remainingMs % 60000) / 1000);
-  const overBudget = elapsedMs >= budgetMs;
-
   return (
-    <div className={cn(
-      'mt-4 rounded border px-4 py-3 font-mono text-[10px]',
-      overBudget
-        ? 'border-red-500/40 bg-red-500/10 text-red-400'
-        : 'border-amber/30 bg-amber/10 text-amber',
-    )}>
-      <div className="uppercase tracking-[0.12em]">
-        {overBudget ? 'pause budget exceeded — session ending' : 'session paused — overlay closed'}
-      </div>
-      <div className="mt-1 text-[9px] text-ink-faint">
-        {overBudget
-          ? `paused ${elapsedMin}m ${elapsedSec}s`
-          : `${remainingMin}m ${remainingSec}s remaining before auto-end`}
-      </div>
-      {!overBudget && (
-        <button
-          type="button"
-          onClick={onResume}
-          className="mt-3 rounded border border-amber/40 bg-bg-deeper/40 px-3 py-1.5 text-[9px] uppercase tracking-[0.12em] text-amber transition-colors hover:bg-amber/10"
-        >
-          Resume Session
-        </button>
-      )}
-    </div>
-  );
-}
-
-function Stat({ label, value, active = false }: { label: string; value: string; active?: boolean }) {
-  return (
-    <div className="rounded border border-line bg-bg-deeper/60 px-3 py-3">
-      <div className="mb-1 font-mono text-[9px] uppercase tracking-[0.16em] text-ink-faint">
+    <div className="rounded-md border border-line bg-bg-deeper/60 px-4 py-3">
+      <div className="mb-1.5 font-mono text-[9px] uppercase tracking-[0.16em] text-ink-faint">
         {label}
       </div>
       <div className="flex items-center gap-2">
         {active && <span className="h-1.5 w-1.5 animate-pulse-fast rounded-full bg-amber" />}
-        <div className="font-serif text-2xl italic text-ink">{value}</div>
+        <strong
+          className={cn(
+            'font-serif text-2xl font-normal italic',
+            tone === 'amber' && 'text-amber',
+            tone === 'blue' && 'text-cool-blue',
+            tone === 'muted' && 'text-ink',
+          )}
+        >
+          {value}
+        </strong>
       </div>
     </div>
   );

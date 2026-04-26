@@ -29,7 +29,6 @@ const NOTE_LIMIT = 80;
 type Props = {
   userId: string | null;
   activeGroup: string | null;
-  initialDuration?: number;
   onSelectGroup: (name: string) => void;
   onSessionEnd: () => void;
 };
@@ -37,7 +36,6 @@ type Props = {
 export function HwSimulator({
   userId: currentUserId,
   activeGroup,
-  initialDuration = 60,
   onSelectGroup,
   onSessionEnd,
 }: Props) {
@@ -51,8 +49,6 @@ export function HwSimulator({
   const [sessionStartedAt, setSessionStartedAt] = useState<string | null>(null);
   const [sessionWorkflow, setSessionWorkflow] = useState<string>('Focus Session');
   const [sessionNote, setSessionNote] = useState('');
-  const [duration, setDuration] = useState(initialDuration);
-  const [sessionDuration, setSessionDuration] = useState(initialDuration);
 
   async function loadCohorts() {
     if (!window.api || !currentUserId) return;
@@ -175,16 +171,13 @@ export function HwSimulator({
     const nextStartedAt = sessionStartedAt ?? new Date().toISOString();
     const payload = {
       status: 'docked',
-      duration,
       workflowGroup,
       sessionStartedAt: nextStartedAt,
-      plannedDurationMinutes: duration,
     };
 
     if (await fire(payload)) {
       setStatus('docked');
       setSessionStartedAt(nextStartedAt);
-      setSessionDuration(duration);
       setSessionWorkflow(workflowGroup);
     }
   }
@@ -194,7 +187,6 @@ export function HwSimulator({
       await fire({
         status: 'undocked',
         sessionStartedAt: sessionStartedAt ?? new Date().toISOString(),
-        plannedDurationMinutes: sessionDuration,
         workflowGroup: sessionWorkflow,
       })
     ) {
@@ -207,7 +199,6 @@ export function HwSimulator({
       await fire({
         status: 'redocked',
         sessionStartedAt: sessionStartedAt ?? new Date().toISOString(),
-        plannedDurationMinutes: sessionDuration,
         workflowGroup: sessionWorkflow,
       })
     ) {
@@ -249,7 +240,7 @@ export function HwSimulator({
 
   const user = users.find((u) => u.id === userId);
   const noCohorts = cohortsLoaded && cohorts.length === 0;
-  const canTryDock = status !== 'docked' && !!userId && cohortsLoaded;
+  const canTryDock = status === 'offline' && !!userId && cohortsLoaded;
 
   return (
     <div className="fixed bottom-5 left-5 z-[100] font-mono">
@@ -339,7 +330,7 @@ export function HwSimulator({
           {/* Note */}
           <div className="mb-3">
             <div className="mb-1 flex items-center justify-between text-[9px] text-ink-faint">
-              <span>note / what you are doing optional</span>
+              <span>note (optional)</span>
               <span>{sessionNote.length}/{NOTE_LIMIT}</span>
             </div>
             <textarea
@@ -352,30 +343,6 @@ export function HwSimulator({
               placeholder="e.g. finish econ problem set"
               className="h-16 w-full resize-none rounded border border-line-mid bg-white/[0.04] px-2 py-1.5 text-[9px] leading-4 text-ink placeholder-ink-faint outline-none focus:border-amber/40"
             />
-          </div>
-
-          {/* Duration */}
-          <div className="mb-3">
-            <div className="mb-1 text-[9px] text-ink-faint">session duration (min)</div>
-            <div className="flex gap-1.5">
-              {[30, 45, 60, 90].map((d) => (
-                <button
-                  key={d}
-                  onClick={() => {
-                    setDuration(d);
-                    if (status === 'offline') setSessionDuration(d);
-                  }}
-                  className={cn(
-                    'rounded border px-2 py-1 text-[9px] transition-colors',
-                    duration === d
-                      ? 'border-amber/60 bg-amber/10 text-amber'
-                      : 'border-line-mid text-ink-dim hover:text-ink',
-                  )}
-                >
-                  {d}m
-                </button>
-              ))}
-            </div>
           </div>
 
           {/* Status */}

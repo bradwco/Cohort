@@ -42,7 +42,10 @@ interface OpenAiResponse {
   }>;
 }
 
-const REQUEST_TIMEOUT_MS = 120_000; // 2 minutes for Gemma inference + network latency
+// 30s is plenty for a healthy Gemma response and fails fast when the
+// backend is unreachable, instead of stacking 2-minute aborts in the
+// console while the dashboard insight effect re-fires.
+const REQUEST_TIMEOUT_MS = 30_000;
 
 function buildChatUrl(baseUrl: string): string {
   const trimmed = baseUrl.replace(/\/$/, "");

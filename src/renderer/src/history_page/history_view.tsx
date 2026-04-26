@@ -85,7 +85,6 @@ function dbSessionToRow(s: DBSession, index: number): Session {
     total: totalSeconds != null ? formatDuration(totalSeconds) : dur,
     summary: s.ai_summary ?? null,
     chatLog: normalizeConversationHistory(s.conversation_history),
-    conversationHistory: s.conversation_history ?? undefined,
   };
 }
 

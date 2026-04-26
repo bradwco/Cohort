@@ -12,7 +12,9 @@
       "Bash(unset ELECTRON_RUN_AS_NODE)",
       "Bash(npm uninstall *)",
       "Read(//c/Users/bradc/AppData/Roaming/cohort/**)",
-      "Read(//c/Users/bradc/AppData/Roaming/Cohort/**)"
+      "Read(//c/Users/bradc/AppData/Roaming/Cohort/**)",
+      "Bash(awk '{print $NF}')",
+      "Bash(xargs grep *)"
     ]
   }
 }

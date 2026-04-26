@@ -104,13 +104,20 @@ type Props = {
   userId: string | null;
 };
 
+type FriendsTab = 'activity' | 'social';
+
+const TABS: Array<{ id: FriendsTab; label: string }> = [
+  { id: 'activity', label: 'activity' },
+  { id: 'social', label: 'social' },
+];
+
 export function FriendsView({ userId }: Props) {
+  const [activeTab, setActiveTab] = useState<FriendsTab>('activity');
   const [me, setMe] = useState<ProfileRow | null>(null);
   const [profiles, setProfiles] = useState<ProfileRow[]>([]);
   const [liveStates, setLiveStates] = useState<Map<string, LiveState>>(new Map());
   const [nudgeFeed, setNudgeFeed] = useState<NudgeEvent[]>([]);
   const [recentNudges, setRecentNudges] = useState<Record<string, number>>({});
-  const [inviteCopied, setInviteCopied] = useState(false);
   const [cohorts, setCohorts] = useState<CohortRow[]>([]);
   const [cohortName, setCohortName] = useState('');
   const [joinCode, setJoinCode] = useState('');
@@ -249,17 +256,6 @@ export function FriendsView({ userId }: Props) {
     await window.api.sendFriendNudge(userId, friendId, friendUsername);
   }
 
-  async function handleCopyInvite() {
-    const code = userId ? `COHORT-${userId.slice(0, 4).toUpperCase()}` : 'COHORT-LOCAL';
-    try {
-      await navigator.clipboard.writeText(code);
-    } catch {
-      // Clipboard may be unavailable in some Electron contexts; still reflect the click.
-    }
-    setInviteCopied(true);
-    window.setTimeout(() => setInviteCopied(false), 1400);
-  }
-
   async function handleCreateCohort() {
     if (!userId || !cohortName.trim()) return;
     setCohortStatus('saving');
@@ -377,419 +373,454 @@ export function FriendsView({ userId }: Props) {
     }))
     .sort((a, b) => b.streak - a.streak);
 
-  return (
-    <div className="grid grid-cols-[1fr_320px] gap-6">
-      {/* Left column */}
-      <div className="flex flex-col gap-5">
-        {/* Nudge feed */}
-        {nudgeFeed.length > 0 && (
-          <div className="flex flex-col gap-2">
-            {nudgeFeed.map((n) => (
-              <div key={n.id} className="rounded border border-amber/25 bg-amber/10 px-3 py-2 font-mono text-[10px] uppercase tracking-[0.12em] text-amber">
-                {n.fromName} nudged you
-              </div>
-            ))}
-          </div>
-        )}
+  // ── Reusable section blocks (rendered selectively per active tab) ──────
+  // Each block stays self-contained so we can drop it into any tab without
+  // duplicating handlers or refetching data.
 
-        {/* Search */}
-        <div className="rounded-md border border-line bg-bg-deeper/60 p-4">
-          <div className="mb-3 font-mono text-[10px] uppercase tracking-[0.14em] text-ink-faint">
-            search friends by username
-          </div>
-          <div className="relative flex gap-2">
-            <div className="relative flex-1">
-              <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 font-mono text-[11px] text-ink-faint">@</span>
-              <input
-                value={searchInput}
-                onChange={handleSearchChange}
-                placeholder="username"
-                className="w-full rounded border border-line-mid bg-bg-deeper/60 py-2 pl-6 pr-3 font-mono text-[11px] text-ink placeholder-ink-faint outline-none focus:border-amber/40"
-              />
+  const nudgeFeedBlock = nudgeFeed.length > 0 && (
+    <div className="flex flex-col gap-2">
+      {nudgeFeed.map((n) => (
+        <div key={n.id} className="rounded border border-amber/25 bg-amber/10 px-3 py-2 font-mono text-[10px] uppercase tracking-[0.12em] text-amber">
+          {n.fromName} nudged you
+        </div>
+      ))}
+    </div>
+  );
+
+  const friendsListBlock = (
+    <div className="rounded-md border border-line bg-bg-deeper/60 p-4">
+      <div className="mb-3 flex items-baseline justify-between border-b border-line pb-2.5">
+        <div className="font-serif text-base italic">friends</div>
+        <div className="font-mono text-[10px] text-amber">
+          {onlineCount} online / {profiles.length} total
+        </div>
+      </div>
+      {profiles.length === 0 ? (
+        <div className="py-6 text-center font-mono text-[10px] text-ink-faint">
+          no friends yet — head to the social tab
+        </div>
+      ) : (
+        <div className="flex flex-col divide-y divide-line">
+          {profiles.map((p) => {
+            const live = liveStates.get(p.id);
+            const status = getFriendStatus(p, live);
+            const task = getFriendTask(p, live, status);
+            const color = p.orb_color ?? '#3a3d4a';
+            const nudged = Boolean(recentNudges[p.id]);
+            return (
+              <div key={p.id} className={cn('flex items-center gap-3 py-3', status === 'offline' && 'opacity-50')}>
+                <ProfileAvatar profile={p} color={color} pulse={status === 'online'} flash={nudged} />
+                <div className="min-w-0 flex-1">
+                  <div className="font-serif text-sm italic">@{p.username}</div>
+                  <div className="font-mono text-[9px] text-ink-faint">{task}</div>
+                  {status !== 'offline' && (
+                    <div className="font-mono text-[9px] text-amber">
+                      {formatElapsed(live?.sessionStartedAt ?? p.last_ping)}
+                    </div>
+                  )}
+                  {nudged && (
+                    <div className="font-mono text-[9px] text-amber">nudged you just now</div>
+                  )}
+                </div>
+                <div className="flex items-center gap-2">
+                  <span
+                    className={cn(
+                      'font-mono text-[9px] uppercase tracking-[0.1em]',
+                      status === 'online' ? 'text-amber' : status === 'paused' ? 'text-blue-400' : 'text-ink-faint',
+                    )}
+                  >
+                    {status}
+                  </span>
+                  {status !== 'offline' && (
+                    <button
+                      type="button"
+                      onClick={() => void handleNudge(p.id, p.username)}
+                      className="rounded border border-line px-2 py-0.5 font-mono text-[9px] text-ink-faint transition-colors hover:border-amber/40 hover:text-amber"
+                    >
+                      nudge
+                    </button>
+                  )}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+
+  const activeSessionsBlock = (
+    <div className="rounded-md border border-line bg-bg-deeper/60 p-4">
+      <div className="mb-3 flex items-baseline justify-between border-b border-line pb-2.5">
+        <div className="font-serif text-base italic">active sessions</div>
+        <span className="font-mono text-[10px] text-amber">
+          {cohortOnlineCount} live
+        </span>
+      </div>
+      {sharedCohortProfiles.filter((p) => {
+        const s = liveStates.get(p.id);
+        return s?.status === 'docked' || p.hardware_status === 'docked';
+      }).length === 0 ? (
+        <div className="py-3 text-center font-mono text-[10px] text-ink-faint">
+          no active sessions
+        </div>
+      ) : (
+        sharedCohortProfiles
+          .filter((p) => liveStates.get(p.id)?.status === 'docked' || p.hardware_status === 'docked')
+          .map((p) => {
+            const live = liveStates.get(p.id);
+            return (
+              <div key={p.id} className="flex items-center gap-2 py-2">
+                <ProfileAvatar profile={p} color={p.orb_color ?? '#3a3d4a'} pulse size={24} />
+                <span className="font-serif text-sm italic">{p.username}</span>
+                <span className="ml-auto text-right font-mono text-[9px] text-ink-faint">
+                  <span className="block text-ink-dim">{live?.workflowGroup ?? p.current_activity ?? 'in session'}</span>
+                  <span className="block text-amber">{formatElapsed(live?.sessionStartedAt ?? p.last_ping)}</span>
+                </span>
+              </div>
+            );
+          })
+      )}
+    </div>
+  );
+
+  const leaderboardBlock = (
+    <div className="rounded-md border border-line bg-bg-deeper/60 p-4">
+      <div className="mb-3 flex items-baseline justify-between border-b border-line pb-2.5">
+        <div className="font-serif text-base italic">leaderboard</div>
+        <div className="font-mono text-[9px] text-ink-faint">streak / sessions</div>
+      </div>
+      {leaderboard.length === 0 ? (
+        <div className="py-3 text-center font-mono text-[10px] text-ink-faint">
+          add friends to see the leaderboard
+        </div>
+      ) : (
+        <div className="flex flex-col gap-1">
+          {leaderboard.slice(0, 5).map((p, i) => (
+            <div key={p.id} className="flex items-center gap-2.5 rounded px-2 py-1.5">
+              <span className="w-4 font-mono text-[10px] text-ink-faint">#{i + 1}</span>
+              <ProfileAvatar profile={p} color={p.orb_color ?? '#3a3d4a'} />
+              <span className="flex-1 truncate font-serif text-sm italic">{p.username}</span>
+              <span className="font-mono text-[10px] text-amber">{p.streak}d</span>
+              <span className="font-mono text-[10px] text-ink-faint">{p.sessions}</span>
             </div>
-          </div>
-          {searchResult === 'searching' && (
-            <div className="mt-2 font-mono text-[10px] text-ink-faint">searching...</div>
-          )}
-          {searchResult === 'not-found' && (
-            <div className="mt-2 font-mono text-[10px] text-ink-faint">no user found</div>
-          )}
-          {searchResult && searchResult !== 'searching' && searchResult !== 'not-found' && (
-            <div className="mt-2 flex items-center justify-between rounded border border-line bg-white/[0.02] px-3 py-2">
-              <span className="font-mono text-[11px] text-ink">@{(searchResult as ProfileRow).username}</span>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+
+  const pendingRequestsBlock = (
+    <div className="rounded-md border border-line bg-bg-deeper/60 p-4">
+      <div className="mb-3 flex items-baseline justify-between border-b border-line pb-2.5">
+        <div className="font-serif text-base italic">pending requests</div>
+        <div className="font-mono text-[10px] text-ink-faint">{friendRequests.length}</div>
+      </div>
+      {friendRequests.length === 0 ? (
+        <div className="py-3 text-center font-mono text-[10px] text-ink-faint">
+          no pending requests
+        </div>
+      ) : (
+        <div className="flex flex-col gap-2">
+          {friendRequests.map((request) => (
+            <div key={request.id} className="flex items-center gap-3 rounded border border-line bg-white/[0.02] px-3 py-2">
+              <ProfileAvatar profile={request.requester ?? undefined} size={34} />
+              <div className="min-w-0 flex-1">
+                <div className="truncate font-serif text-sm italic">@{request.requester?.username ?? 'cohort user'}</div>
+                <div className="font-mono text-[9px] text-ink-faint">wants to focus with you</div>
+              </div>
               <button
-                onClick={() => void handleAdd()}
-                disabled={addStatus === 'adding' || addStatus === 'done'}
-                className="rounded border border-amber/40 bg-amber/10 px-2.5 py-1 font-mono text-[10px] text-amber transition-opacity disabled:opacity-50"
+                type="button"
+                onClick={() => void handleAcceptRequest(request)}
+                className="rounded border border-amber/40 bg-amber/10 px-2.5 py-1 font-mono text-[10px] text-amber"
               >
-                {addStatus === 'adding' ? 'sending...' : addStatus === 'done' ? 'sent' : addStatus === 'error' ? 'join same cohort first' : 'request'}
+                accept
               </button>
             </div>
-          )}
+          ))}
         </div>
+      )}
+    </div>
+  );
 
-        {/* Pending requests */}
-        <div className="rounded-md border border-line bg-bg-deeper/60 p-4">
-          <div className="mb-3 flex items-baseline justify-between border-b border-line pb-2.5">
-            <div className="font-serif text-base italic">pending requests</div>
-            <div className="font-mono text-[10px] text-ink-faint">{friendRequests.length}</div>
+  const searchBlock = (
+    <div className="rounded-md border border-line bg-bg-deeper/60 p-4">
+      <div className="mb-3 font-mono text-[10px] uppercase tracking-[0.14em] text-ink-faint">
+        search friends by username
+      </div>
+      <div className="relative flex gap-2">
+        <div className="relative flex-1">
+          <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 font-mono text-[11px] text-ink-faint">@</span>
+          <input
+            value={searchInput}
+            onChange={handleSearchChange}
+            placeholder="username"
+            className="w-full rounded border border-line-mid bg-bg-deeper/60 py-2 pl-6 pr-3 font-mono text-[11px] text-ink placeholder-ink-faint outline-none focus:border-amber/40"
+          />
+        </div>
+      </div>
+      {searchResult === 'searching' && (
+        <div className="mt-2 font-mono text-[10px] text-ink-faint">searching...</div>
+      )}
+      {searchResult === 'not-found' && (
+        <div className="mt-2 font-mono text-[10px] text-ink-faint">no user found</div>
+      )}
+      {searchResult && searchResult !== 'searching' && searchResult !== 'not-found' && (
+        <div className="mt-2 flex items-center justify-between rounded border border-line bg-white/[0.02] px-3 py-2">
+          <span className="font-mono text-[11px] text-ink">@{(searchResult as ProfileRow).username}</span>
+          <button
+            onClick={() => void handleAdd()}
+            disabled={addStatus === 'adding' || addStatus === 'done'}
+            className="rounded border border-amber/40 bg-amber/10 px-2.5 py-1 font-mono text-[10px] text-amber transition-opacity disabled:opacity-50"
+          >
+            {addStatus === 'adding' ? 'sending...' : addStatus === 'done' ? 'sent' : addStatus === 'error' ? 'join same cohort first' : 'request'}
+          </button>
+        </div>
+      )}
+    </div>
+  );
+
+  const sameCohortBlock = cohortCandidates.length > 0 && (
+    <div className="rounded-md border border-line bg-bg-deeper/60 p-4">
+      <div className="mb-3 flex items-baseline justify-between border-b border-line pb-2.5">
+        <div className="font-serif text-base italic">same cohort</div>
+        <div className="font-mono text-[10px] text-ink-faint">{cohortCandidates.length}</div>
+      </div>
+      <div className="flex flex-col gap-2">
+        {cohortCandidates.slice(0, 4).map((profile) => (
+          <div key={profile.id} className="flex items-center gap-2 rounded border border-line bg-white/[0.02] px-2 py-2">
+            <ProfileAvatar profile={profile} color={profile.orb_color ?? '#3a3d4a'} />
+            <span className="min-w-0 flex-1 truncate font-serif text-sm italic">@{profile.username}</span>
           </div>
-          {friendRequests.length === 0 ? (
-            <div className="py-3 text-center font-mono text-[10px] text-ink-faint">
-              no pending requests
-            </div>
-          ) : (
-            <div className="flex flex-col gap-2">
-              {friendRequests.map((request) => (
-                <div key={request.id} className="flex items-center gap-3 rounded border border-line bg-white/[0.02] px-3 py-2">
-                  <ProfileAvatar profile={request.requester ?? undefined} size={34} />
-                  <div className="min-w-0 flex-1">
-                    <div className="truncate font-serif text-sm italic">@{request.requester?.username ?? 'cohort user'}</div>
-                    <div className="font-mono text-[9px] text-ink-faint">wants to focus with you</div>
-                  </div>
+        ))}
+      </div>
+    </div>
+  );
+
+  const createCohortBlock = (
+    <div className="rounded-md border border-line bg-bg-deeper/60 p-4">
+      <div className="mb-3 flex items-baseline justify-between border-b border-line pb-2.5">
+        <div className="font-serif text-base italic">create cohort</div>
+        <button
+          type="button"
+          onClick={handleCreateCohort}
+          disabled={!cohortName.trim() || cohortStatus === 'saving'}
+          className="font-mono text-[9px] uppercase tracking-[0.1em] text-ink-faint transition-colors hover:text-amber disabled:opacity-40"
+        >
+          + create
+        </button>
+      </div>
+
+      <input
+        value={cohortName}
+        onChange={(event) => {
+          setCohortName(event.target.value);
+          setCohortStatus('idle');
+        }}
+        onKeyDown={(event) => {
+          if (event.key === 'Enter') void handleCreateCohort();
+        }}
+        maxLength={32}
+        placeholder="new cohort name"
+        className="w-full rounded border border-line-mid bg-bg-deeper/60 px-3 py-2 font-mono text-[11px] text-ink placeholder-ink-faint outline-none focus:border-amber/40"
+      />
+      <div className="mt-2 font-mono text-[9px] uppercase tracking-[0.1em] text-ink-faint">
+        creates a random 6-character join code
+      </div>
+    </div>
+  );
+
+  const joinCohortBlock = (
+    <div className="rounded-md border border-line bg-bg-deeper/60 p-4">
+      <div className="mb-3 flex items-baseline justify-between border-b border-line pb-2.5">
+        <div className="font-serif text-base italic">join cohort</div>
+        <button
+          type="button"
+          onClick={() => void handleJoinCohort()}
+          disabled={!joinCode.trim() || cohortStatus === 'saving'}
+          className="font-mono text-[9px] uppercase tracking-[0.1em] text-ink-faint transition-colors hover:text-amber disabled:opacity-40"
+        >
+          join
+        </button>
+      </div>
+      <input
+        value={joinCode}
+        onChange={(event) => {
+          setJoinCode(event.target.value.toUpperCase());
+          setCohortStatus('idle');
+        }}
+        onKeyDown={(event) => {
+          if (event.key === 'Enter') void handleJoinCohort();
+        }}
+        placeholder="paste join code"
+        className="w-full rounded border border-line-mid bg-bg-deeper/60 px-3 py-2 font-mono text-[11px] uppercase text-ink placeholder-ink-faint outline-none focus:border-amber/40"
+      />
+      {cohortStatus === 'error' && (
+        <div className="mt-2 font-mono text-[10px] text-amber">
+          couldn't save cohort
+        </div>
+      )}
+    </div>
+  );
+
+  const myCohortsBlock = (
+    <div className="rounded-md border border-line bg-bg-deeper/60 p-4">
+      <div className="mb-3 flex items-baseline justify-between border-b border-line pb-2.5">
+        <div className="font-serif text-base italic">my cohorts</div>
+        <div className="font-mono text-[10px] text-ink-faint">{cohorts.length}</div>
+      </div>
+      {cohorts.length === 0 ? (
+        <div className="py-3 text-center font-mono text-[10px] text-ink-faint">
+          create a cohort to group focus sessions
+        </div>
+      ) : (
+        <div className="flex flex-col gap-2">
+          {cohorts.map((cohort) => {
+            const isOpen = selectedCohortId === cohort.id;
+            const members = cohortMembersMap.get(cohort.id);
+            const loading = loadingCohortId === cohort.id;
+            return (
+              <div key={cohort.id} className="rounded border border-line bg-white/[0.02]">
+                <div className="flex items-start gap-2 px-3 py-2">
                   <button
                     type="button"
-                    onClick={() => void handleAcceptRequest(request)}
-                    className="rounded border border-amber/40 bg-amber/10 px-2.5 py-1 font-mono text-[10px] text-amber"
+                    onClick={() => void handleToggleCohort(cohort)}
+                    className="min-w-0 flex-1 text-left transition-colors hover:opacity-80"
                   >
-                    accept
+                    <div className="truncate font-serif text-sm italic text-ink">{cohort.name}</div>
+                    <div className="mt-0.5 font-mono text-[9px] uppercase tracking-[0.1em] text-ink-faint">
+                      {cohort.member_count ?? 1} member{(cohort.member_count ?? 1) === 1 ? '' : 's'}
+                      {' · '}
+                      <span className="text-amber/70">{isOpen ? 'collapse ▲' : 'view members ▼'}</span>
+                    </div>
                   </button>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-
-        {/* Invite by code */}
-        <div className="rounded-md border border-line bg-bg-deeper/60 p-4">
-          <div className="mb-3 flex items-baseline justify-between border-b border-line pb-2.5">
-            <div className="font-serif text-base italic">invite a friend</div>
-            <div className="font-mono text-[9px] uppercase tracking-[0.1em] text-ink-faint">invite code</div>
-          </div>
-          <div className="flex items-center gap-2">
-            <div className="flex-1 rounded border border-line bg-white/[0.02] px-3 py-2 font-mono text-[11px] uppercase tracking-[0.14em] text-ink-dim">
-              {userId ? `COHORT-${userId.slice(0, 4).toUpperCase()}` : 'COHORT-LOCAL'}
-            </div>
-            <button
-              type="button"
-              onClick={() => void handleCopyInvite()}
-              className="rounded border border-line px-3 py-2 font-mono text-[10px] uppercase tracking-[0.1em] text-ink-faint transition-colors hover:border-amber/40 hover:text-amber"
-            >
-              {inviteCopied ? 'copied' : 'copy'}
-            </button>
-          </div>
-        </div>
-
-        {/* Friends list */}
-        <div className="rounded-md border border-line bg-bg-deeper/60 p-4">
-          <div className="mb-3 flex items-baseline justify-between border-b border-line pb-2.5">
-            <div className="font-serif text-base italic">friends</div>
-            <div className="font-mono text-[10px] text-amber">
-              {onlineCount} online / {profiles.length} total
-            </div>
-          </div>
-          {profiles.length === 0 ? (
-            <div className="py-6 text-center font-mono text-[10px] text-ink-faint">
-              no friends yet - add one above
-            </div>
-          ) : (
-            <div className="flex flex-col divide-y divide-line">
-              {profiles.map((p) => {
-                const live = liveStates.get(p.id);
-                const status = getFriendStatus(p, live);
-                const task = getFriendTask(p, live, status);
-                const color = p.orb_color ?? '#3a3d4a';
-                const nudged = Boolean(recentNudges[p.id]);
-                return (
-                  <div key={p.id} className={cn('flex items-center gap-3 py-3', status === 'offline' && 'opacity-50')}>
-                    <ProfileAvatar profile={p} color={color} pulse={status === 'online'} flash={nudged} />
-                    <div className="min-w-0 flex-1">
-                      <div className="font-serif text-sm italic">@{p.username}</div>
-                      <div className="font-mono text-[9px] text-ink-faint">{task}</div>
-                      {status !== 'offline' && (
-                        <div className="font-mono text-[9px] text-amber">
-                          {formatElapsed(live?.sessionStartedAt ?? p.last_ping)}
-                        </div>
-                      )}
-                      {nudged && (
-                        <div className="font-mono text-[9px] text-amber">nudged you just now</div>
-                      )}
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <span
-                        className={cn(
-                          'font-mono text-[9px] uppercase tracking-[0.1em]',
-                          status === 'online' ? 'text-amber' : status === 'paused' ? 'text-blue-400' : 'text-ink-faint',
-                        )}
-                      >
-                        {status}
-                      </span>
-                      {status !== 'offline' && (
-                        <button
-                          type="button"
-                          onClick={() => void handleNudge(p.id, p.username)}
-                          className="rounded border border-line px-2 py-0.5 font-mono text-[9px] text-ink-faint transition-colors hover:border-amber/40 hover:text-amber"
-                        >
-                          nudge
-                        </button>
-                      )}
-                    </div>
+                  <div className="flex shrink-0 gap-1">
+                    <button
+                      type="button"
+                      onClick={() => void handleCopyCohort(cohort)}
+                      className="rounded border border-line px-2 py-1 font-mono text-[9px] uppercase tracking-[0.1em] text-ink-faint transition-colors hover:border-amber/40 hover:text-amber"
+                    >
+                      {copiedCohortId === cohort.id ? 'copied' : cohort.invite_code}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => void handleLeaveCohort(cohort)}
+                      disabled={leavingCohortId === cohort.id}
+                      className="rounded border border-line px-2 py-1 font-mono text-[9px] text-ink-faint transition-colors hover:border-red-500/40 hover:text-red-400"
+                    >
+                      {leavingCohortId === cohort.id ? 'leaving' : 'leave'}
+                    </button>
                   </div>
-                );
-              })}
-            </div>
-          )}
-        </div>
-      </div>
+                </div>
 
-      {/* Right column */}
-      <div className="flex flex-col gap-5">
-        {/* Create Cohort */}
-        <div className="rounded-md border border-line bg-bg-deeper/60 p-4">
-          <div className="mb-3 flex items-baseline justify-between border-b border-line pb-2.5">
-            <div className="font-serif text-base italic">create cohort</div>
-            <button
-              type="button"
-              onClick={handleCreateCohort}
-              disabled={!cohortName.trim() || cohortStatus === 'saving'}
-              className="font-mono text-[9px] uppercase tracking-[0.1em] text-ink-faint transition-colors hover:text-amber disabled:opacity-40"
-            >
-              + create
-            </button>
-          </div>
-
-          <input
-            value={cohortName}
-            onChange={(event) => {
-              setCohortName(event.target.value);
-              setCohortStatus('idle');
-            }}
-            onKeyDown={(event) => {
-              if (event.key === 'Enter') void handleCreateCohort();
-            }}
-            maxLength={32}
-            placeholder="new cohort name"
-            className="w-full rounded border border-line-mid bg-bg-deeper/60 px-3 py-2 font-mono text-[11px] text-ink placeholder-ink-faint outline-none focus:border-amber/40"
-          />
-          <div className="mt-2 font-mono text-[9px] uppercase tracking-[0.1em] text-ink-faint">
-            creates a random 6-character join code
-          </div>
-        </div>
-
-        {/* Join Cohort */}
-        <div className="rounded-md border border-line bg-bg-deeper/60 p-4">
-          <div className="mb-3 flex items-baseline justify-between border-b border-line pb-2.5">
-            <div className="font-serif text-base italic">join cohort</div>
-            <button
-              type="button"
-              onClick={() => void handleJoinCohort()}
-              disabled={!joinCode.trim() || cohortStatus === 'saving'}
-              className="font-mono text-[9px] uppercase tracking-[0.1em] text-ink-faint transition-colors hover:text-amber disabled:opacity-40"
-            >
-              join
-            </button>
-          </div>
-          <input
-            value={joinCode}
-            onChange={(event) => {
-              setJoinCode(event.target.value.toUpperCase());
-              setCohortStatus('idle');
-            }}
-            onKeyDown={(event) => {
-              if (event.key === 'Enter') void handleJoinCohort();
-            }}
-            placeholder="paste join code"
-            className="w-full rounded border border-line-mid bg-bg-deeper/60 px-3 py-2 font-mono text-[11px] uppercase text-ink placeholder-ink-faint outline-none focus:border-amber/40"
-          />
-          {cohortStatus === 'error' && (
-            <div className="mt-2 font-mono text-[10px] text-amber">
-              couldn't save cohort
-            </div>
-          )}
-        </div>
-
-        {/* My Cohorts */}
-        <div className="rounded-md border border-line bg-bg-deeper/60 p-4">
-          <div className="mb-3 flex items-baseline justify-between border-b border-line pb-2.5">
-            <div className="font-serif text-base italic">my cohorts</div>
-            <div className="font-mono text-[10px] text-ink-faint">{cohorts.length}</div>
-          </div>
-          {cohorts.length === 0 ? (
-            <div className="py-3 text-center font-mono text-[10px] text-ink-faint">
-              create a cohort to group focus sessions
-            </div>
-          ) : (
-            <div className="flex flex-col gap-2">
-              {cohorts.map((cohort) => {
-                const isOpen = selectedCohortId === cohort.id;
-                const members = cohortMembersMap.get(cohort.id);
-                const loading = loadingCohortId === cohort.id;
-                return (
-                  <div key={cohort.id} className="rounded border border-line bg-white/[0.02]">
-                    <div className="flex items-start gap-2 px-3 py-2">
-                      <button
-                        type="button"
-                        onClick={() => void handleToggleCohort(cohort)}
-                        className="min-w-0 flex-1 text-left transition-colors hover:opacity-80"
-                      >
-                        <div className="truncate font-serif text-sm italic text-ink">{cohort.name}</div>
-                        <div className="mt-0.5 font-mono text-[9px] uppercase tracking-[0.1em] text-ink-faint">
-                          {cohort.member_count ?? 1} member{(cohort.member_count ?? 1) === 1 ? '' : 's'}
-                          {' · '}
-                          <span className="text-amber/70">{isOpen ? 'collapse ▲' : 'view members ▼'}</span>
-                        </div>
-                      </button>
-                      <div className="flex shrink-0 gap-1">
-                        <button
-                          type="button"
-                          onClick={() => void handleCopyCohort(cohort)}
-                          className="rounded border border-line px-2 py-1 font-mono text-[9px] uppercase tracking-[0.1em] text-ink-faint transition-colors hover:border-amber/40 hover:text-amber"
-                        >
-                          {copiedCohortId === cohort.id ? 'copied' : cohort.invite_code}
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => void handleLeaveCohort(cohort)}
-                          disabled={leavingCohortId === cohort.id}
-                          className="rounded border border-line px-2 py-1 font-mono text-[9px] text-ink-faint transition-colors hover:border-red-500/40 hover:text-red-400"
-                        >
-                          {leavingCohortId === cohort.id ? 'leaving' : 'leave'}
-                        </button>
-                      </div>
-                    </div>
-
-                    {isOpen && (
-                      <div className="border-t border-line px-3 pb-2 pt-2">
-                        {loading && (
-                          <div className="py-2 text-center font-mono text-[9px] text-ink-faint">loading...</div>
-                        )}
-                        {!loading && members && members.length === 0 && (
-                          <div className="py-2 text-center font-mono text-[9px] text-ink-faint">no members found</div>
-                        )}
-                        {!loading && members && members.map((member) => {
-                          const live = liveStates.get(member.id);
-                          const memberStatus = live?.status === 'docked' ? 'online'
-                            : live?.status === 'undocked' ? 'paused'
-                            : member.hardware_status === 'docked' ? 'online'
-                            : 'offline';
-                          const task = memberStatus === 'online' ? (live?.workflowGroup ?? member.current_activity ?? 'in session')
-                            : memberStatus === 'paused' ? 'paused'
-                            : 'offline';
-                          const elapsed = memberStatus !== 'offline'
-                            ? formatElapsed(live?.sessionStartedAt ?? (member.hardware_status === 'docked' ? member.last_ping : undefined))
-                            : null;
-                          return (
-                            <div
-                              key={member.id}
-                              className={cn('flex items-center gap-2.5 py-1.5', memberStatus === 'offline' && 'opacity-50')}
-                            >
-                              <ProfileAvatar profile={member} color={member.orb_color ?? '#3a3d4a'} pulse={memberStatus === 'online'} size={26} />
-                              <div className="min-w-0 flex-1">
-                                <div className="truncate font-serif text-sm italic">@{member.username}</div>
-                                <div className="font-mono text-[9px] text-ink-faint">{task}</div>
-                                {elapsed && (
-                                  <div className="font-mono text-[9px] text-amber">{elapsed}</div>
-                                )}
-                              </div>
-                              <div className="flex flex-col items-end gap-0.5">
-                                <span className={cn(
-                                  'font-mono text-[9px] uppercase tracking-[0.1em]',
-                                  memberStatus === 'online' ? 'text-amber' : memberStatus === 'paused' ? 'text-blue-400' : 'text-ink-faint',
-                                )}>
-                                  {memberStatus}
-                                </span>
-                                {member.streak > 0 && (
-                                  <span className="font-mono text-[9px] text-ink-faint">{member.streak}d</span>
-                                )}
-                              </div>
-                            </div>
-                          );
-                        })}
-                      </div>
+                {isOpen && (
+                  <div className="border-t border-line px-3 pb-2 pt-2">
+                    {loading && (
+                      <div className="py-2 text-center font-mono text-[9px] text-ink-faint">loading...</div>
                     )}
+                    {!loading && members && members.length === 0 && (
+                      <div className="py-2 text-center font-mono text-[9px] text-ink-faint">no members found</div>
+                    )}
+                    {!loading && members && members.map((member) => {
+                      const live = liveStates.get(member.id);
+                      const memberStatus = live?.status === 'docked' ? 'online'
+                        : live?.status === 'undocked' ? 'paused'
+                        : member.hardware_status === 'docked' ? 'online'
+                        : 'offline';
+                      const task = memberStatus === 'online' ? (live?.workflowGroup ?? member.current_activity ?? 'in session')
+                        : memberStatus === 'paused' ? 'paused'
+                        : 'offline';
+                      const elapsed = memberStatus !== 'offline'
+                        ? formatElapsed(live?.sessionStartedAt ?? (member.hardware_status === 'docked' ? member.last_ping : undefined))
+                        : null;
+                      return (
+                        <div
+                          key={member.id}
+                          className={cn('flex items-center gap-2.5 py-1.5', memberStatus === 'offline' && 'opacity-50')}
+                        >
+                          <ProfileAvatar profile={member} color={member.orb_color ?? '#3a3d4a'} pulse={memberStatus === 'online'} size={26} />
+                          <div className="min-w-0 flex-1">
+                            <div className="truncate font-serif text-sm italic">@{member.username}</div>
+                            <div className="font-mono text-[9px] text-ink-faint">{task}</div>
+                            {elapsed && (
+                              <div className="font-mono text-[9px] text-amber">{elapsed}</div>
+                            )}
+                          </div>
+                          <div className="flex flex-col items-end gap-0.5">
+                            <span className={cn(
+                              'font-mono text-[9px] uppercase tracking-[0.1em]',
+                              memberStatus === 'online' ? 'text-amber' : memberStatus === 'paused' ? 'text-blue-400' : 'text-ink-faint',
+                            )}>
+                              {memberStatus}
+                            </span>
+                            {member.streak > 0 && (
+                              <span className="font-mono text-[9px] text-ink-faint">{member.streak}d</span>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })}
                   </div>
-                );
-              })}
-            </div>
-          )}
+                )}
+              </div>
+            );
+          })}
         </div>
+      )}
+    </div>
+  );
 
-        {cohortCandidates.length > 0 && (
-          <div className="rounded-md border border-line bg-bg-deeper/60 p-4">
-            <div className="mb-3 flex items-baseline justify-between border-b border-line pb-2.5">
-              <div className="font-serif text-base italic">same cohort</div>
-              <div className="font-mono text-[10px] text-ink-faint">{cohortCandidates.length}</div>
-            </div>
-            <div className="flex flex-col gap-2">
-              {cohortCandidates.slice(0, 4).map((profile) => (
-                <div key={profile.id} className="flex items-center gap-2 rounded border border-line bg-white/[0.02] px-2 py-2">
-                  <ProfileAvatar profile={profile} color={profile.orb_color ?? '#3a3d4a'} />
-                  <span className="min-w-0 flex-1 truncate font-serif text-sm italic">@{profile.username}</span>
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
+  // ── Tab nav + per-tab layout ───────────────────────────────────────────
+  // UX rationale: Activity is the default tab — highest-frequency view
+  // of who's online and the leaderboard. Social bundles every "grow your
+  // graph" action: incoming requests first (need response), then search,
+  // then cohort suggestions/create/join, then your existing cohorts.
 
-        {/* Active cohort sessions */}
-        <div className="rounded-md border border-line bg-bg-deeper/60 p-4">
-          <div className="mb-3 flex items-baseline justify-between border-b border-line pb-2.5">
-            <div className="font-serif text-base italic">active sessions</div>
-            <span className="font-mono text-[10px] text-amber">
-              {cohortOnlineCount} live
-            </span>
-          </div>
-          {sharedCohortProfiles.filter((p) => {
-            const s = liveStates.get(p.id);
-            return s?.status === 'docked' || p.hardware_status === 'docked';
-          }).length === 0 ? (
-            <div className="py-3 text-center font-mono text-[10px] text-ink-faint">
-              no active sessions
-            </div>
-          ) : (
-            sharedCohortProfiles
-              .filter((p) => liveStates.get(p.id)?.status === 'docked' || p.hardware_status === 'docked')
-              .map((p) => {
-                const live = liveStates.get(p.id);
-                return (
-                  <div key={p.id} className="flex items-center gap-2 py-2">
-                    <ProfileAvatar profile={p} color={p.orb_color ?? '#3a3d4a'} pulse size={24} />
-                    <span className="font-serif text-sm italic">{p.username}</span>
-                    <span className="ml-auto text-right font-mono text-[9px] text-ink-faint">
-                      <span className="block text-ink-dim">{live?.workflowGroup ?? p.current_activity ?? 'in session'}</span>
-                      <span className="block text-amber">{formatElapsed(live?.sessionStartedAt ?? p.last_ping)}</span>
-                    </span>
-                  </div>
-                );
-              })
-          )}
-        </div>
-
-        {/* Leaderboard */}
-        <div className="rounded-md border border-line bg-bg-deeper/60 p-4">
-          <div className="mb-3 flex items-baseline justify-between border-b border-line pb-2.5">
-            <div className="font-serif text-base italic">leaderboard</div>
-            <div className="font-mono text-[9px] text-ink-faint">streak / sessions</div>
-          </div>
-          {leaderboard.length === 0 ? (
-            <div className="py-3 text-center font-mono text-[10px] text-ink-faint">
-              add friends to see the leaderboard
-            </div>
-          ) : (
-            <div className="flex flex-col gap-1">
-              {leaderboard.slice(0, 5).map((p, i) => (
-                <div key={p.id} className="flex items-center gap-2.5 rounded px-2 py-1.5">
-                  <span className="w-4 font-mono text-[10px] text-ink-faint">#{i + 1}</span>
-                  <ProfileAvatar profile={p} color={p.orb_color ?? '#3a3d4a'} />
-                  <span className="flex-1 truncate font-serif text-sm italic">{p.username}</span>
-                  <span className="font-mono text-[10px] text-amber">{p.streak}d</span>
-                  <span className="font-mono text-[10px] text-ink-faint">{p.sessions}</span>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
+  return (
+    <div className="flex flex-col gap-5">
+      <div className="flex gap-1 border-b border-line">
+        {TABS.map((tab) => (
+          <button
+            key={tab.id}
+            type="button"
+            onClick={() => setActiveTab(tab.id)}
+            className={cn(
+              'rounded-t-md border border-b-0 px-4 py-2 font-mono text-[10px] uppercase tracking-[0.14em] transition-colors',
+              activeTab === tab.id
+                ? 'border-line bg-bg-deeper/60 text-amber'
+                : 'border-transparent text-ink-faint hover:text-ink',
+            )}
+          >
+            {tab.label}
+          </button>
+        ))}
       </div>
+
+      {activeTab === 'activity' && (
+        <div className="grid grid-cols-[1fr_320px] gap-6">
+          <div className="flex flex-col gap-5">
+            {nudgeFeedBlock}
+            {friendsListBlock}
+          </div>
+          <div className="flex flex-col gap-5">
+            {activeSessionsBlock}
+            {leaderboardBlock}
+          </div>
+        </div>
+      )}
+
+      {activeTab === 'social' && (
+        <div className="mx-auto flex w-full max-w-3xl flex-col gap-5">
+          {pendingRequestsBlock}
+          {searchBlock}
+          {sameCohortBlock}
+          <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
+            {createCohortBlock}
+            {joinCohortBlock}
+          </div>
+          {myCohortsBlock}
+        </div>
+      )}
     </div>
   );
 }

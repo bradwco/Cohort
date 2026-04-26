@@ -4,7 +4,6 @@ import { AnimatePresence } from 'motion/react';
 import { DashboardView } from './home_page/dashboard_view';
 import { HistoryView } from './history_page/history_view';
 import { FriendsView } from './friends_page/friends_view';
-import { OrbView } from './orb_page/orb_view';
 import { SettingsView } from './settings_page/settings_view';
 import { Sidebar } from './shared_ui/sidebar';
 import { Header } from './shared_ui/header';
@@ -77,6 +76,7 @@ function DashboardApp({
   const sessionLengthRef = useRef(profile.sessionLength);
 
   const [orbStatus, setOrbStatus] = useState<OrbStatus>('offline');
+  const [sessionStartedAtMs, setSessionStartedAtMs] = useState<number | null>(null);
   const [secondsElapsed, setSecondsElapsed] = useState(0);
   const [liftCount, setLiftCount] = useState(0);
   const [totalPauseMs, setTotalPauseMs] = useState(0);
@@ -93,7 +93,6 @@ function DashboardApp({
   const [brightness, setBrightness] = useState(72);
   const [breathSpeed, setBreathSpeed] = useState(45);
   const [taskColor, setTaskColor] = useState(profile.avatar.background);
-  const [nudgeDnd, setNudgeDnd] = useState(false);
 
   const sessionActive = orbStatus !== 'offline';
 
@@ -102,11 +101,26 @@ function DashboardApp({
     void window.api.initMqtt(userId);
   }, [userId]);
 
+  // Wallclock-derived elapsed: this stays in lockstep with the overlay's
+  // right-column timer because both read the same sessionStartedAt and
+  // accumulated pause from the main process. While paused, we freeze at
+  // the pause moment so the value matches what the user saw in the overlay
+  // before they hit Stop.
   useEffect(() => {
-    if (orbStatus !== 'docked' || sessionPausedAt !== null) return;
-    const id = setInterval(() => setSecondsElapsed((s) => s + 1), 1000);
+    if (orbStatus === 'offline' || sessionStartedAtMs == null) {
+      setSecondsElapsed(0);
+      return;
+    }
+    const recompute = () => {
+      const referenceNow = sessionPausedAt != null ? Date.parse(sessionPausedAt) : Date.now();
+      const elapsedSec = Math.max(0, Math.floor((referenceNow - sessionStartedAtMs - totalPauseMs) / 1000));
+      setSecondsElapsed(elapsedSec);
+    };
+    recompute();
+    if (sessionPausedAt != null) return;
+    const id = setInterval(recompute, 1000);
     return () => clearInterval(id);
-  }, [orbStatus, sessionPausedAt]);
+  }, [orbStatus, sessionPausedAt, sessionStartedAtMs, totalPauseMs]);
 
   useEffect(() => {
     if (feedRef.current) feedRef.current.scrollTop = feedRef.current.scrollHeight;
@@ -132,10 +146,14 @@ function DashboardApp({
       if (data.status === 'docked') {
         setSessionPausedAt(null);
         if (data.duration != null) {
-          setSecondsElapsed(0);
           setCurrentWorkflow(data.workflowGroup ?? '');
           setLiftCount(0);
           setTotalPauseMs(0);
+          const startMs = data.sessionStartedAt ? Date.parse(data.sessionStartedAt) : Date.now();
+          setSessionStartedAtMs(Number.isFinite(startMs) ? startMs : Date.now());
+        } else if (data.sessionStartedAt) {
+          const startMs = Date.parse(data.sessionStartedAt);
+          if (Number.isFinite(startMs)) setSessionStartedAtMs(startMs);
         }
         if (data.totalPauseMs != null) {
           setTotalPauseMs(data.totalPauseMs);
@@ -158,23 +176,12 @@ function DashboardApp({
     setTotalPauseMs(0);
     setCurrentWorkflow('');
     setSessionPausedAt(null);
+    setSessionStartedAtMs(null);
   }
 
   function handleEndSession() {
     void window.api?.endSession(Math.round(totalPauseMs / 60000), 0, 'Ended from desktop');
     handleSessionEnd();
-  }
-
-  async function handleResumeSession() {
-    setSessionPausedAt(null);
-    setOrbStatus('docked');
-    try {
-      await window.api?.resumeSession();
-    } catch (err) {
-      console.error('[session] resume failed:', err);
-      setOrbStatus('undocked');
-      setSessionPausedAt(new Date().toISOString());
-    }
   }
 
   // Listen for overlay pause events
@@ -228,7 +235,6 @@ function DashboardApp({
       <HwSimulator
         userId={userId}
         activeGroup={activeGroup}
-        initialDuration={currentProfile.sessionLength}
         onSelectGroup={setActiveGroup}
         onSessionEnd={handleSessionEnd}
       />
@@ -249,7 +255,7 @@ function DashboardApp({
           onToggleTelemetry={() => setTelemetryOpen((t) => !t)}
         />
 
-        <div className="px-10 pb-16">
+        <div className={activeView === 'dashboard' ? 'px-10 pb-0' : 'px-10 pb-16'}>
           {activeView === 'dashboard' && (
             <DashboardView
               userId={userId}
@@ -260,30 +266,20 @@ function DashboardApp({
               liftCount={liftCount}
               totalPauseMs={totalPauseMs}
               currentWorkflow={currentWorkflow}
-              sessionPausedAt={sessionPausedAt}
-              pauseBudgetMinutes={pauseBudgetMinutes}
-              onResumeSession={handleResumeSession}
-              onEndSession={handleEndSession}
             />
           )}
           {activeView === 'history' && <HistoryView userId={userId} />}
           {activeView === 'friends' && <FriendsView userId={userId} />}
-          {activeView === 'orb' && (
-            <OrbView
+          {activeView === 'settings' && (
+            <SettingsView
+              profile={currentProfile}
+              userId={userId}
               brightness={brightness}
               setBrightness={setBrightness}
               breathSpeed={breathSpeed}
               setBreathSpeed={setBreathSpeed}
               taskColor={taskColor}
               setTaskColor={setTaskColor}
-              nudgeDnd={nudgeDnd}
-              setNudgeDnd={setNudgeDnd}
-            />
-          )}
-          {activeView === 'settings' && (
-            <SettingsView
-              profile={currentProfile}
-              userId={userId}
               onSignOut={onSignOut}
               onProfileUpdate={handleProfileUpdate}
             />
