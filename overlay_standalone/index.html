@@ -93,6 +93,7 @@
       }, 1000);
 
       let sessionId = null;
+      let ownAvatarEl = null;
 
       (async () => {
         try {
@@ -110,6 +111,7 @@
             });
             console.log('[session] created:', sessionId);
           }
+          window.electronAPI.updateFocusState('productive').catch(() => {});
         } catch (e) {
           console.warn('[session] failed to init:', e.message);
         }
@@ -137,6 +139,7 @@
           const avatarsEl = document.getElementById('avatars');
           const div = document.createElement('div');
           div.className = 'avatar status-active';
+          ownAvatarEl = div;
           div.style.cssText = 'background:transparent;';
           div.innerHTML = window.renderPixelAvatar(profile.avatar)
             + `<span class="name">${profile.username ?? 'me'}</span>`;
@@ -148,13 +151,19 @@
       })();
 
       // ── Friend avatars (poll every 30s) ────────────────────────────────
-      const friendAvatarMap = {};
+      const friendAvatarMap = {}; // userId → { el: HTMLElement, focusState: string | null }
 
       const ORB_COLORS = {
         amber: '#E8A87C', blue: '#7CB0E8', green: '#9CE8A8',
         purple: '#B89AE8', coral: '#E8756B', moss: '#7FA075',
         gold: '#D8B75C', slate: '#51616B',
       };
+
+      function focusStateClass(state) {
+        if (state === 'distracted') return 'status-off';
+        if (state === 'idle') return 'status-idle';
+        return 'status-active';
+      }
 
       async function syncFriendAvatars() {
         try {
@@ -195,7 +204,7 @@
 
             if (isDocked && !existing) {
               const div = document.createElement('div');
-              div.className = 'avatar status-active';
+              div.className = 'avatar ' + focusStateClass(p.focus_state);
               let body = '';
               if (p.avatar) {
                 div.style.cssText = 'background:transparent;';
@@ -207,10 +216,17 @@
               }
               div.innerHTML = body + `<span class="name">${p.username ?? '?'}</span>`;
               avatarsEl.appendChild(div);
-              friendAvatarMap[p.id] = div;
-              console.log('[friends] appeared:', p.username, '(avatar:', !!p.avatar, ')');
+              friendAvatarMap[p.id] = { el: div, focusState: p.focus_state ?? null };
+              console.log('[friends] appeared:', p.username, '(avatar:', !!p.avatar, 'focus:', p.focus_state, ')');
+            } else if (isDocked && existing) {
+              const newFocusState = p.focus_state ?? null;
+              if (existing.focusState !== newFocusState) {
+                existing.el.className = 'avatar ' + focusStateClass(newFocusState);
+                existing.focusState = newFocusState;
+                console.log('[friends] glow updated:', p.username, '->', newFocusState);
+              }
             } else if (!isDocked && existing) {
-              existing.remove();
+              existing.el.remove();
               delete friendAvatarMap[p.id];
               console.log('[friends] disappeared:', p.username);
             }
@@ -218,7 +234,7 @@
 
           for (const id of Object.keys(friendAvatarMap)) {
             if (!seenIds.has(id)) {
-              friendAvatarMap[id].remove();
+              friendAvatarMap[id].el.remove();
               delete friendAvatarMap[id];
             }
           }
@@ -232,7 +248,19 @@
 
       document.getElementById('stop').addEventListener('click', async () => {
         try {
+<<<<<<< HEAD
           await window.electronAPI.pauseSession();
+=======
+          window.electronAPI.updateFocusState('offline').catch(() => {});
+          if (sessionId) {
+            const score = focusSmoother ? +(focusSmoother.state().productiveRatio * 10).toFixed(1) : null;
+            await window.electronAPI.endSession({
+              sessionId,
+              flowScore: score,
+              conversationHistory: gemini?.history ?? [],
+            });
+          }
+>>>>>>> 5c21c71b6cd8ea341a561471b39da79bc8d967b4
         } catch (e) {
           console.warn('[session] pause failed:', e.message);
         } finally {
@@ -409,6 +437,8 @@
         currentFocusState = state;
         document.body.classList.remove('state-distracted', 'state-idle');
         if (state !== 'productive') document.body.classList.add('state-' + state);
+        window.electronAPI.updateFocusState(state).catch(() => {});
+        if (ownAvatarEl) ownAvatarEl.className = 'avatar ' + focusStateClass(state);
       }
 
       async function checkFocus() {

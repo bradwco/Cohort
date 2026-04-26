@@ -4,7 +4,7 @@ import { resolve } from 'node:path';
 
 export default defineConfig({
   main: {
-    envPrefix: ['SUPABASE_', 'MQTT_'],
+    envPrefix: ['SUPABASE_', 'MQTT_', 'GEMINI_', 'LOCAL_VLM_'],
     build: {
       lib: { entry: resolve(__dirname, 'src/main/index.ts') },
     },
