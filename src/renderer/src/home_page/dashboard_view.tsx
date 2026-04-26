@@ -1,9 +1,10 @@
 import { useEffect, useState } from 'react';
 import { PixelOrb } from '../orb_character/pixel_orb';
 import { PixelOrbMini } from '../orb_character/pixel_orb_mini';
+import { PixelAvatar } from '../components/onboarding/pixel_avatar';
 import { SparkIcon } from '../shared_ui/icons';
 import { cn } from '../shared_ui/cn';
-import type { OnboardingData } from '../state/onboarding';
+import type { AvatarTraits, OnboardingData } from '../state/onboarding';
 
 type OrbStatus = 'offline' | 'docked' | 'undocked';
 
@@ -13,6 +14,8 @@ type ProfileRow = {
   orb_color: string;
   hardware_status: 'docked' | 'offline';
   current_activity: string;
+  last_ping: string;
+  avatar?: AvatarTraits | null;
 };
 
 type LiveState = {
@@ -108,7 +111,16 @@ export function DashboardView({
   useEffect(() => {
     if (!userId || !window.api) return;
     void window.api.getSessionHistory(userId).then((rows) => setSessions((rows as DBSession[]) ?? []));
-    void window.api.getFriends(userId).then((rows) => setFriends((rows as ProfileRow[]) ?? []));
+    void Promise.all([
+      window.api.getFriends(userId),
+      window.api.getSharedCohortProfiles(userId),
+    ]).then(([friendRows, cohortRows]) => {
+      const merged = new Map<string, ProfileRow>();
+      for (const row of [...((friendRows as ProfileRow[]) ?? []), ...((cohortRows as ProfileRow[]) ?? [])]) {
+        merged.set(row.id, row);
+      }
+      setFriends(Array.from(merged.values()));
+    });
   }, [userId]);
 
   useEffect(() => {
@@ -229,16 +241,18 @@ export function DashboardView({
               <div className="flex flex-col gap-2">
                 {activeFriends.slice(0, 5).map((f) => {
                   const live = liveStates.get(f.id);
+                  const activity = live?.workflowGroup ?? f.current_activity ?? 'in session';
+                  const elapsedFrom = live?.sessionStartedAt ?? (f.hardware_status === 'docked' ? f.last_ping : undefined);
                   return (
                     <div key={f.id} className="flex items-center gap-2.5">
-                      <PixelOrbMini color={f.orb_color ?? '#E8A87C'} pulse />
+                      <ProfileAvatar profile={f} color={f.orb_color ?? '#E8A87C'} pulse />
                       <div className="min-w-0 flex-1">
                         <div className="truncate font-serif text-sm italic">{f.username}</div>
                         <div className="truncate font-mono text-[9px] text-ink-faint">
-                          {live?.workflowGroup ?? f.current_activity}
+                          {activity}
                         </div>
                         <div className="font-mono text-[9px] text-amber">
-                          {formatElapsed(live?.sessionStartedAt)}
+                          {formatElapsed(elapsedFrom)}
                         </div>
                       </div>
                     </div>
@@ -265,6 +279,26 @@ export function DashboardView({
       </div>
     </div>
   );
+}
+
+function ProfileAvatar({
+  profile,
+  color,
+  pulse = false,
+}: {
+  profile?: ProfileRow;
+  color?: string;
+  pulse?: boolean;
+}) {
+  if (profile?.avatar) {
+    return (
+      <div className={cn('h-[30px] w-[30px] shrink-0', pulse && 'animate-pulse')}>
+        <PixelAvatar avatar={profile.avatar} size={30} />
+      </div>
+    );
+  }
+
+  return <PixelOrbMini color={color} pulse={pulse} />;
 }
 
 function Stat({ label, value, active = false }: { label: string; value: string; active?: boolean }) {
