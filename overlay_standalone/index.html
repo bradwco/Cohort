@@ -10,15 +10,38 @@
     <div id="notch-wrapper">
       <div class="notch" id="notch">
         <div class="notch-handle" id="notch-handle" title="Drag to move">
-          <svg width="10" height="10" viewBox="0 0 10 10" fill="currentColor" aria-hidden="true">
-            <circle cx="2" cy="2" r="1.5"/><circle cx="8" cy="2" r="1.5"/>
-            <circle cx="2" cy="8" r="1.5"/><circle cx="8" cy="8" r="1.5"/>
+          <svg
+            width="10"
+            height="10"
+            viewBox="0 0 10 10"
+            fill="currentColor"
+            aria-hidden="true"
+          >
+            <circle cx="2" cy="2" r="1.5" />
+            <circle cx="8" cy="2" r="1.5" />
+            <circle cx="2" cy="8" r="1.5" />
+            <circle cx="8" cy="8" r="1.5" />
           </svg>
         </div>
-        <input class="notch-input" id="notch-input" type="text" placeholder="Ask me anything…" />
+        <input
+          class="notch-input"
+          id="notch-input"
+          type="text"
+          placeholder="Ask me anything…"
+        />
         <button class="notch-submit" id="notch-submit" aria-label="Submit">
-          <svg width="14" height="11" viewBox="0 0 14 11" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-            <path d="M13 1v5a2 2 0 0 1-2 2H1m0 0 3-3M1 8l3 3"/>
+          <svg
+            width="14"
+            height="11"
+            viewBox="0 0 14 11"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="1.6"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+            aria-hidden="true"
+          >
+            <path d="M13 1v5a2 2 0 0 1-2 2H1m0 0 3-3M1 8l3 3" />
           </svg>
         </button>
       </div>
@@ -29,9 +52,19 @@
       <div class="ai-panel" id="ai-panel">
         <div class="ai-panel-header">
           <button class="ai-minimize" id="ai-minimize" title="Minimize">
-            <svg width="10" height="10" viewBox="0 0 10 10" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-              <path d="M6.5 1H9V3.5M9 1L5.5 4.5"/>
-              <path d="M3.5 9H1V6.5M1 9L4.5 5.5"/>
+            <svg
+              width="10"
+              height="10"
+              viewBox="0 0 10 10"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="1.5"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              aria-hidden="true"
+            >
+              <path d="M6.5 1H9V3.5M9 1L5.5 4.5" />
+              <path d="M3.5 9H1V6.5M1 9L4.5 5.5" />
             </svg>
           </button>
         </div>
@@ -39,10 +72,16 @@
           <div id="ai-messages"></div>
         </div>
         <div class="ai-resize-grip" id="ai-resize-grip" title="Resize">
-          <svg width="10" height="10" viewBox="0 0 10 10" fill="currentColor" aria-hidden="true">
-            <circle cx="8" cy="8" r="1.5"/>
-            <circle cx="4" cy="8" r="1.5"/>
-            <circle cx="8" cy="4" r="1.5"/>
+          <svg
+            width="10"
+            height="10"
+            viewBox="0 0 10 10"
+            fill="currentColor"
+            aria-hidden="true"
+          >
+            <circle cx="8" cy="8" r="1.5" />
+            <circle cx="4" cy="8" r="1.5" />
+            <circle cx="8" cy="4" r="1.5" />
           </svg>
         </div>
       </div>
@@ -54,16 +93,32 @@
     <!-- Right column -->
     <div class="column" id="column">
       <div class="column-handle" id="column-handle" title="Drag to move">
-        <svg width="16" height="10" viewBox="0 0 16 10" fill="currentColor" aria-hidden="true">
-          <circle cx="2"  cy="2" r="1.5"/><circle cx="8"  cy="2" r="1.5"/><circle cx="14" cy="2" r="1.5"/>
-          <circle cx="2"  cy="8" r="1.5"/><circle cx="8"  cy="8" r="1.5"/><circle cx="14" cy="8" r="1.5"/>
+        <svg
+          width="16"
+          height="10"
+          viewBox="0 0 16 10"
+          fill="currentColor"
+          aria-hidden="true"
+        >
+          <circle cx="2" cy="2" r="1.5" />
+          <circle cx="8" cy="2" r="1.5" />
+          <circle cx="14" cy="2" r="1.5" />
+          <circle cx="2" cy="8" r="1.5" />
+          <circle cx="8" cy="8" r="1.5" />
+          <circle cx="14" cy="8" r="1.5" />
         </svg>
       </div>
       <div class="avatars" id="avatars"></div>
       <div class="divider"></div>
       <div class="timer" id="timer">25:00</div>
       <button class="stop" id="stop" aria-label="Stop session" title="Stop">
-        <svg width="10" height="10" viewBox="0 0 10 10" fill="currentColor" aria-hidden="true">
+        <svg
+          width="10"
+          height="10"
+          viewBox="0 0 10 10"
+          fill="currentColor"
+          aria-hidden="true"
+        >
           <rect x="0" y="0" width="10" height="10" rx="1.5" />
         </svg>
       </button>
@@ -77,18 +132,19 @@
       let secsElapsed = 0;
       let goalSecs = 50 * 60; // default 50 min, updated from config
       let goalReached = false;
-      const timerEl = document.getElementById('timer');
-      timerEl.textContent = '00:00';
+      const timerEl = document.getElementById("timer");
+      timerEl.textContent = "00:00";
 
       const tick = setInterval(() => {
         secsElapsed++;
         timerEl.textContent =
-          String(Math.floor(secsElapsed / 60)).padStart(2, '0') + ':' +
-          String(secsElapsed % 60).padStart(2, '0');
+          String(Math.floor(secsElapsed / 60)).padStart(2, "0") +
+          ":" +
+          String(secsElapsed % 60).padStart(2, "0");
         if (!goalReached && secsElapsed >= goalSecs) {
           goalReached = true;
-          timerEl.style.color = 'var(--accent)';
-          timerEl.title = 'Session goal reached!';
+          timerEl.style.color = "var(--accent)";
+          timerEl.title = "Session goal reached!";
         }
       }, 1000);
 
@@ -103,50 +159,67 @@
           }
           if (cfg.SESSION_ID) {
             sessionId = cfg.SESSION_ID;
-            console.log('[session] using existing:', sessionId);
+            console.log("[session] using existing:", sessionId);
           } else {
             sessionId = await window.electronAPI.createSession({
               plannedDurationMinutes: cfg.PLANNED_DURATION_MINUTES || 50,
-              workflowGroup: 'Focus Session',
+              workflowGroup: "Focus Session",
             });
-            console.log('[session] created:', sessionId);
+            console.log("[session] created:", sessionId);
           }
-          window.electronAPI.updateFocusState('productive').catch(() => {});
+          window.electronAPI.updateFocusState("productive").catch(() => {});
         } catch (e) {
-          console.warn('[session] failed to init:', e.message);
+          console.warn("[session] failed to init:", e.message);
         }
       })();
 
       (async () => {
         try {
           const cfg = await window.electronAPI.getConfig();
-          console.log('[avatar] config userId:', cfg.USER_ID, 'url:', cfg.SUPABASE_URL);
+          console.log(
+            "[avatar] config userId:",
+            cfg.USER_ID,
+            "url:",
+            cfg.SUPABASE_URL,
+          );
           if (!cfg.SUPABASE_URL || !cfg.SUPABASE_ANON_KEY || !cfg.USER_ID) {
-            console.warn('[avatar] missing config fields');
+            console.warn("[avatar] missing config fields");
             return;
           }
-          const url = cfg.SUPABASE_URL.replace(/\/$/, '');
+          const url = cfg.SUPABASE_URL.replace(/\/$/, "");
           const resp = await fetch(
             `${url}/rest/v1/profiles?id=eq.${cfg.USER_ID}&select=*`,
-            { headers: { 'apikey': cfg.SUPABASE_ANON_KEY, 'Authorization': `Bearer ${cfg.SUPABASE_ANON_KEY}` } },
+            {
+              headers: {
+                apikey: cfg.SUPABASE_ANON_KEY,
+                Authorization: `Bearer ${cfg.SUPABASE_ANON_KEY}`,
+              },
+            },
           );
-          console.log('[avatar] fetch status:', resp.status);
-          if (!resp.ok) { console.warn('[avatar] fetch failed:', await resp.text()); return; }
+          console.log("[avatar] fetch status:", resp.status);
+          if (!resp.ok) {
+            console.warn("[avatar] fetch failed:", await resp.text());
+            return;
+          }
           const rows = await resp.json();
           const profile = rows[0];
-          console.log('[avatar] profile:', JSON.stringify(profile));
-          if (!profile?.avatar) { console.warn('[avatar] no avatar in profile'); return; }
-          const avatarsEl = document.getElementById('avatars');
-          const div = document.createElement('div');
-          div.className = 'avatar status-active';
+          console.log("[avatar] profile:", JSON.stringify(profile));
+          if (!profile?.avatar) {
+            console.warn("[avatar] no avatar in profile");
+            return;
+          }
+          const avatarsEl = document.getElementById("avatars");
+          const div = document.createElement("div");
+          div.className = "avatar status-active";
           ownAvatarEl = div;
-          div.style.cssText = 'background:transparent;';
-          div.innerHTML = window.renderPixelAvatar(profile.avatar)
-            + `<span class="name">${profile.username ?? 'me'}</span>`;
+          div.style.cssText = "background:transparent;";
+          div.innerHTML =
+            window.renderPixelAvatar(profile.avatar) +
+            `<span class="name">${profile.username ?? "me"}</span>`;
           avatarsEl.appendChild(div);
-          console.log('[avatar] rendered for', profile.username);
+          console.log("[avatar] rendered for", profile.username);
         } catch (e) {
-          console.error('[avatar] error:', e);
+          console.error("[avatar] error:", e);
         }
       })();
 
@@ -154,26 +227,32 @@
       const friendAvatarMap = {}; // userId → { el: HTMLElement, focusState: string | null }
 
       const ORB_COLORS = {
-        amber: '#E8A87C', blue: '#7CB0E8', green: '#9CE8A8',
-        purple: '#B89AE8', coral: '#E8756B', moss: '#7FA075',
-        gold: '#D8B75C', slate: '#51616B',
+        amber: "#E8A87C",
+        blue: "#7CB0E8",
+        green: "#9CE8A8",
+        purple: "#B89AE8",
+        coral: "#E8756B",
+        moss: "#7FA075",
+        gold: "#D8B75C",
+        slate: "#51616B",
       };
 
       function focusStateClass(state) {
-        if (state === 'distracted') return 'status-off';
-        if (state === 'idle') return 'status-idle';
-        return 'status-active';
+        if (state === "distracted") return "status-off";
+        if (state === "idle") return "status-idle";
+        return "status-active";
       }
 
       async function syncFriendAvatars() {
         try {
           const cfg = await window.electronAPI.getConfig();
-          if (!cfg.SUPABASE_URL || !cfg.SUPABASE_ANON_KEY || !cfg.USER_ID) return;
+          if (!cfg.SUPABASE_URL || !cfg.SUPABASE_ANON_KEY || !cfg.USER_ID)
+            return;
 
-          const url     = cfg.SUPABASE_URL.replace(/\/$/, '');
+          const url = cfg.SUPABASE_URL.replace(/\/$/, "");
           const headers = {
-            'apikey':        cfg.SUPABASE_ANON_KEY,
-            'Authorization': `Bearer ${cfg.SUPABASE_ANON_KEY}`,
+            apikey: cfg.SUPABASE_ANON_KEY,
+            Authorization: `Bearer ${cfg.SUPABASE_ANON_KEY}`,
           };
 
           const fResp = await fetch(
@@ -181,54 +260,82 @@
             { headers },
           );
           const fData = await fResp.json();
-          if (!fResp.ok) { console.warn('[friends] friendships fetch error:', fData); return; }
+          if (!fResp.ok) {
+            console.warn("[friends] friendships fetch error:", fData);
+            return;
+          }
           const [fRow] = Array.isArray(fData) ? fData : [];
           const friendIds = fRow?.friend_ids ?? [];
-          console.log('[friends] friend_ids:', friendIds);
+          console.log("[friends] friend_ids:", friendIds);
           if (friendIds.length === 0) return;
 
           const pResp = await fetch(
-            `${url}/rest/v1/profiles?id=in.(${friendIds.join(',')})&select=*`,
+            `${url}/rest/v1/profiles?id=in.(${friendIds.join(",")})&select=*`,
             { headers },
           );
           const profiles = await pResp.json();
-          console.log('[friends] profiles:', profiles.map((p) => ({ u: p.username, status: p.hardware_status, hasAvatar: !!p.avatar })));
+          console.log(
+            "[friends] profiles:",
+            profiles.map((p) => ({
+              u: p.username,
+              status: p.hardware_status,
+              hasAvatar: !!p.avatar,
+            })),
+          );
 
-          const avatarsEl = document.getElementById('avatars');
+          const avatarsEl = document.getElementById("avatars");
           const seenIds = new Set();
 
           for (const p of profiles) {
             seenIds.add(p.id);
-            const isDocked = p.hardware_status === 'docked';
+            const isDocked = p.hardware_status === "docked";
             const existing = friendAvatarMap[p.id];
 
             if (isDocked && !existing) {
-              const div = document.createElement('div');
-              div.className = 'avatar ' + focusStateClass(p.focus_state);
-              let body = '';
+              const div = document.createElement("div");
+              div.className = "avatar " + focusStateClass(p.focus_state);
+              let body = "";
               if (p.avatar) {
-                div.style.cssText = 'background:transparent;';
+                div.style.cssText = "background:transparent;";
                 body = window.renderPixelAvatar(p.avatar);
               } else {
-                const bg = ORB_COLORS[p.orb_color] ?? '#51616B';
+                const bg = ORB_COLORS[p.orb_color] ?? "#51616B";
                 div.style.cssText = `background:${bg};`;
-                body = `<span style="font-size:14px;font-weight:600;color:rgba(255,255,255,0.85)">${(p.username?.[0] ?? '?').toUpperCase()}</span>`;
+                body = `<span style="font-size:14px;font-weight:600;color:rgba(255,255,255,0.85)">${(p.username?.[0] ?? "?").toUpperCase()}</span>`;
               }
-              div.innerHTML = body + `<span class="name">${p.username ?? '?'}</span>`;
+              div.innerHTML =
+                body + `<span class="name">${p.username ?? "?"}</span>`;
               avatarsEl.appendChild(div);
-              friendAvatarMap[p.id] = { el: div, focusState: p.focus_state ?? null };
-              console.log('[friends] appeared:', p.username, '(avatar:', !!p.avatar, 'focus:', p.focus_state, ')');
+              friendAvatarMap[p.id] = {
+                el: div,
+                focusState: p.focus_state ?? null,
+              };
+              console.log(
+                "[friends] appeared:",
+                p.username,
+                "(avatar:",
+                !!p.avatar,
+                "focus:",
+                p.focus_state,
+                ")",
+              );
             } else if (isDocked && existing) {
               const newFocusState = p.focus_state ?? null;
               if (existing.focusState !== newFocusState) {
-                existing.el.className = 'avatar ' + focusStateClass(newFocusState);
+                existing.el.className =
+                  "avatar " + focusStateClass(newFocusState);
                 existing.focusState = newFocusState;
-                console.log('[friends] glow updated:', p.username, '->', newFocusState);
+                console.log(
+                  "[friends] glow updated:",
+                  p.username,
+                  "->",
+                  newFocusState,
+                );
               }
             } else if (!isDocked && existing) {
               existing.el.remove();
               delete friendAvatarMap[p.id];
-              console.log('[friends] disappeared:', p.username);
+              console.log("[friends] disappeared:", p.username);
             }
           }
 
@@ -239,30 +346,28 @@
             }
           }
         } catch (e) {
-          console.warn('[friends] sync error:', e.message);
+          console.warn("[friends] sync error:", e.message);
         }
       }
 
       syncFriendAvatars();
       setInterval(syncFriendAvatars, 30_000);
 
-      document.getElementById('stop').addEventListener('click', async () => {
+      document.getElementById("stop").addEventListener("click", async () => {
         try {
-<<<<<<< HEAD
-          await window.electronAPI.pauseSession();
-=======
-          window.electronAPI.updateFocusState('offline').catch(() => {});
+          window.electronAPI.updateFocusState("offline").catch(() => {});
           if (sessionId) {
-            const score = focusSmoother ? +(focusSmoother.state().productiveRatio * 10).toFixed(1) : null;
+            const score = focusSmoother
+              ? +(focusSmoother.state().productiveRatio * 10).toFixed(1)
+              : null;
             await window.electronAPI.endSession({
               sessionId,
               flowScore: score,
               conversationHistory: gemini?.history ?? [],
             });
           }
->>>>>>> 5c21c71b6cd8ea341a561471b39da79bc8d967b4
         } catch (e) {
-          console.warn('[session] pause failed:', e.message);
+          console.warn("[session] pause failed:", e.message);
         } finally {
           window.close();
         }
@@ -271,15 +376,17 @@
       let lastActivityTime = Date.now();
 
       // ── Notch drag (X + Y) ─────────────────────────────────────────────
-      const wrapper     = document.getElementById('notch-wrapper');
-      const notchHandle = document.getElementById('notch-handle');
-      let notchDragging = false, notchOffX = 0, notchOffY = 0;
+      const wrapper = document.getElementById("notch-wrapper");
+      const notchHandle = document.getElementById("notch-handle");
+      let notchDragging = false,
+        notchOffX = 0,
+        notchOffY = 0;
 
-      notchHandle.addEventListener('mousedown', (e) => {
+      notchHandle.addEventListener("mousedown", (e) => {
         const r = wrapper.getBoundingClientRect();
-        wrapper.style.transform = 'none';
-        wrapper.style.left = r.left + 'px';
-        wrapper.style.top  = r.top  + 'px';
+        wrapper.style.transform = "none";
+        wrapper.style.left = r.left + "px";
+        wrapper.style.top = r.top + "px";
         notchDragging = true;
         notchOffX = e.clientX - r.left;
         notchOffY = e.clientY - r.top;
@@ -288,14 +395,15 @@
       });
 
       // ── Column drag (Y only) ───────────────────────────────────────────
-      const column    = document.getElementById('column');
-      const colHandle = document.getElementById('column-handle');
-      let colDragging = false, colOffY = 0;
+      const column = document.getElementById("column");
+      const colHandle = document.getElementById("column-handle");
+      let colDragging = false,
+        colOffY = 0;
 
-      colHandle.addEventListener('mousedown', (e) => {
+      colHandle.addEventListener("mousedown", (e) => {
         const r = column.getBoundingClientRect();
-        column.style.transform = 'none';
-        column.style.top = r.top + 'px';
+        column.style.transform = "none";
+        column.style.top = r.top + "px";
         colDragging = true;
         colOffY = e.clientY - r.top;
         window.electronAPI.setIgnoreMouseEvents(false);
@@ -303,12 +411,14 @@
       });
 
       // ── Panel resize ───────────────────────────────────────────────────
-      const aiPanelEl  = document.getElementById('ai-panel');
-      const aiScrollEl = document.getElementById('ai-scroll');
-      const resizeGrip = document.getElementById('ai-resize-grip');
-      let resizing = false, rsY = 0, rsH = 0;
+      const aiPanelEl = document.getElementById("ai-panel");
+      const aiScrollEl = document.getElementById("ai-scroll");
+      const resizeGrip = document.getElementById("ai-resize-grip");
+      let resizing = false,
+        rsY = 0,
+        rsH = 0;
 
-      resizeGrip.addEventListener('mousedown', (e) => {
+      resizeGrip.addEventListener("mousedown", (e) => {
         resizing = true;
         rsY = e.clientY;
         rsH = aiScrollEl.getBoundingClientRect().height;
@@ -316,36 +426,37 @@
         e.preventDefault();
       });
 
-      document.addEventListener('mouseup', () => {
+      document.addEventListener("mouseup", () => {
         notchDragging = false;
-        colDragging   = false;
-        resizing      = false;
+        colDragging = false;
+        resizing = false;
       });
 
-      document.addEventListener('mousemove', (e) => {
+      document.addEventListener("mousemove", (e) => {
         lastActivityTime = Date.now();
         if (notchDragging) {
-          wrapper.style.left = (e.clientX - notchOffX) + 'px';
-          wrapper.style.top  = (e.clientY - notchOffY) + 'px';
+          wrapper.style.left = e.clientX - notchOffX + "px";
+          wrapper.style.top = e.clientY - notchOffY + "px";
           return;
         }
         if (colDragging) {
-          column.style.top = (e.clientY - colOffY) + 'px';
+          column.style.top = e.clientY - colOffY + "px";
           return;
         }
         if (resizing) {
-          aiScrollEl.style.maxHeight = Math.max(80, rsH + (e.clientY - rsY)) + 'px';
+          aiScrollEl.style.maxHeight =
+            Math.max(80, rsH + (e.clientY - rsY)) + "px";
           return;
         }
         const el = document.elementFromPoint(e.clientX, e.clientY);
-        const overUI = el && el.closest('#notch-wrapper, .column');
+        const overUI = el && el.closest("#notch-wrapper, .column");
         window.electronAPI.setIgnoreMouseEvents(!overUI);
       });
 
       // ── Gemini AI ──────────────────────────────────────────────────────
       let gemini = null;
-      const peekEl     = document.getElementById('ai-peek');
-      const messagesEl = document.getElementById('ai-messages');
+      const peekEl = document.getElementById("ai-peek");
+      const messagesEl = document.getElementById("ai-messages");
 
       async function ensureGemini() {
         if (gemini) return;
@@ -355,90 +466,101 @@
 
       function renderMarkdown(raw) {
         return raw
-          .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
-          .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
-          .replace(/\*(.*?)\*/g,     '<em>$1</em>')
-          .replace(/`([^`]+)`/g,     '<code>$1</code>')
-          .replace(/\n/g,            '<br>');
+          .replace(/&/g, "&amp;")
+          .replace(/</g, "&lt;")
+          .replace(/>/g, "&gt;")
+          .replace(/\*\*(.*?)\*\*/g, "<strong>$1</strong>")
+          .replace(/\*(.*?)\*/g, "<em>$1</em>")
+          .replace(/`([^`]+)`/g, "<code>$1</code>")
+          .replace(/\n/g, "<br>");
       }
 
       function addMessage(role, html, classList = []) {
-        const div = document.createElement('div');
-        div.className = ['ai-message', role, ...classList].join(' ');
+        const div = document.createElement("div");
+        div.className = ["ai-message", role, ...classList].join(" ");
         div.innerHTML = html;
         messagesEl.appendChild(div);
-        aiPanelEl.classList.add('visible');
-        wrapper.classList.remove('minimized');
+        aiPanelEl.classList.add("visible");
+        wrapper.classList.remove("minimized");
         aiScrollEl.scrollTop = aiScrollEl.scrollHeight;
         return div;
       }
 
       async function handleSubmit() {
         await ensureGemini();
-        const input    = document.getElementById('notch-input');
+        const input = document.getElementById("notch-input");
         const userText = input.value.trim();
-        input.value    = '';
+        input.value = "";
 
         if (!userText && gemini.isFirstMessage) {
-          addMessage('assistant', 'Screen is visible — describe what you need help with.');
+          addMessage(
+            "assistant",
+            "Screen is visible — describe what you need help with.",
+          );
           return;
         }
 
-        if (userText) addMessage('user', renderMarkdown(userText));
-        const loading = addMessage('assistant', '…', ['loading']);
+        if (userText) addMessage("user", renderMarkdown(userText));
+        const loading = addMessage("assistant", "…", ["loading"]);
 
         try {
           const screenshot = await window.electronAPI.takeScreenshot();
-          const reply      = await gemini.send(userText || null, screenshot);
+          const reply = await gemini.send(userText || null, screenshot);
           loading.innerHTML = renderMarkdown(reply);
-          loading.classList.remove('loading');
+          loading.classList.remove("loading");
         } catch (err) {
-          loading.innerHTML = 'Error: ' + err.message;
-          loading.classList.replace('loading', 'error');
+          loading.innerHTML = "Error: " + err.message;
+          loading.classList.replace("loading", "error");
         }
 
         aiScrollEl.scrollTop = aiScrollEl.scrollHeight;
       }
 
-      document.getElementById('notch-input').addEventListener('keydown', (e) => {
-        if (e.key === 'Enter') handleSubmit();
-      });
-      document.getElementById('notch-submit').addEventListener('click', handleSubmit);
+      document
+        .getElementById("notch-input")
+        .addEventListener("keydown", (e) => {
+          if (e.key === "Enter") handleSubmit();
+        });
+      document
+        .getElementById("notch-submit")
+        .addEventListener("click", handleSubmit);
 
-      document.getElementById('ai-minimize').addEventListener('click', () => {
-        aiPanelEl.classList.remove('visible');
-        wrapper.classList.add('minimized');
+      document.getElementById("ai-minimize").addEventListener("click", () => {
+        aiPanelEl.classList.remove("visible");
+        wrapper.classList.add("minimized");
       });
 
-      peekEl.addEventListener('click', () => {
-        aiPanelEl.classList.add('visible');
-        wrapper.classList.remove('minimized');
+      peekEl.addEventListener("click", () => {
+        aiPanelEl.classList.add("visible");
+        wrapper.classList.remove("minimized");
         aiScrollEl.scrollTop = aiScrollEl.scrollHeight;
       });
 
       // ── Focus state tracking ───────────────────────────────────────────
       // Local-first pipeline: cheap thumbnail capture -> perceptual hash gate ->
       // localhost vision model -> rolling five-minute productivity score.
-      const IDLE_MS             = 30_000;
-      const ACTIVE_CHECK_MS     = 5_000;
-      const CLASSIFY_COOLDOWN   = 10_000;
-      const HASH_DIFF_THRESHOLD = 13;       // roughly 5% of a 16x16 average hash
+      const IDLE_MS = 30_000;
+      const ACTIVE_CHECK_MS = 5_000;
+      const CLASSIFY_COOLDOWN = 10_000;
+      const HASH_DIFF_THRESHOLD = 13; // roughly 5% of a 16x16 average hash
 
-      let focusClassifier     = null;
-      let focusGate           = null;
-      let focusSmoother       = null;
+      let focusClassifier = null;
+      let focusGate = null;
+      let focusSmoother = null;
       let lastActiveCheckTime = 0;
-      let lastClassifyTime    = 0;
-      let classifyInFlight    = false;
-      let currentFocusState   = 'productive';
+      let lastClassifyTime = 0;
+      let classifyInFlight = false;
+      let currentFocusState = "productive";
 
       function setFocusState(state) {
         if (state === currentFocusState) return;
         currentFocusState = state;
-        document.body.classList.remove('state-distracted', 'state-idle');
-        if (state !== 'productive') document.body.classList.add('state-' + state);
+        document.body.classList.remove("state-distracted", "state-idle");
+        if (state !== "productive")
+          document.body.classList.add("state-" + state);
         window.electronAPI.updateFocusState(state).catch(() => {});
-        if (ownAvatarEl) ownAvatarEl.className = 'avatar ' + focusStateClass(state);
+        if (ownAvatarEl)
+          ownAvatarEl.className = "avatar " + focusStateClass(state);
       }
 
       async function checkFocus() {
@@ -449,7 +571,9 @@
               endpoint: cfg.LOCAL_VLM_URL,
               model: cfg.LOCAL_VLM_MODEL,
             });
-            focusGate = new PerceptualHashGate({ threshold: HASH_DIFF_THRESHOLD });
+            focusGate = new PerceptualHashGate({
+              threshold: HASH_DIFF_THRESHOLD,
+            });
             focusSmoother = new FocusSmoother({
               windowMs: 5 * 60_000,
               minSamples: 3,
@@ -458,12 +582,12 @@
           }
 
           const now = Date.now();
-          const isActive = (now - lastActivityTime) < IDLE_MS;
-          const dbg = document.getElementById('focus-debug');
+          const isActive = now - lastActivityTime < IDLE_MS;
+          const dbg = document.getElementById("focus-debug");
 
           // When idle: poll every 1s for mouse movement to exit
-          if (currentFocusState === 'idle') {
-            if (isActive) setFocusState('productive');
+          if (currentFocusState === "idle") {
+            if (isActive) setFocusState("productive");
             return;
           }
 
@@ -473,12 +597,13 @@
 
           if (!isActive) {
             focusSmoother.reset();
-            setFocusState('idle');
+            setFocusState("idle");
             return;
           }
 
           // Active + changed screen + local model available -> classify
-          if (classifyInFlight || now - lastClassifyTime < CLASSIFY_COOLDOWN) return;
+          if (classifyInFlight || now - lastClassifyTime < CLASSIFY_COOLDOWN)
+            return;
 
           classifyInFlight = true;
           lastClassifyTime = now;
@@ -491,25 +616,30 @@
           const gate = await focusGate.hasSignificantChange(thumbUrl);
           if (!gate.changed) {
             classifyInFlight = false;
-            if (dbg) dbg.textContent = `unchanged · hash ${gate.diff} · ${currentFocusState}`;
+            if (dbg)
+              dbg.textContent = `unchanged · hash ${gate.diff} · ${currentFocusState}`;
             return;
           }
 
-          focusClassifier.classify(thumbUrl).then((result) => {
-            const smoothed = focusSmoother.add(result);
-            if (smoothed.ready) setFocusState(smoothed.label);
-            if (dbg) {
-              const pct = Math.round(smoothed.productiveRatio * 100);
-              dbg.textContent = `${result} · ${pct}% productive · n=${smoothed.sampleCount}`;
-            }
-          }).catch((e) => {
-            if (dbg) dbg.textContent = 'local classifier: ' + e.message;
-          }).finally(() => {
-            classifyInFlight = false;
-          });
+          focusClassifier
+            .classify(thumbUrl)
+            .then((result) => {
+              const smoothed = focusSmoother.add(result);
+              if (smoothed.ready) setFocusState(smoothed.label);
+              if (dbg) {
+                const pct = Math.round(smoothed.productiveRatio * 100);
+                dbg.textContent = `${result} · ${pct}% productive · n=${smoothed.sampleCount}`;
+              }
+            })
+            .catch((e) => {
+              if (dbg) dbg.textContent = "local classifier: " + e.message;
+            })
+            .finally(() => {
+              classifyInFlight = false;
+            });
         } catch (e) {
           classifyInFlight = false;
-          console.warn('[focus] error:', e.message);
+          console.warn("[focus] error:", e.message);
         }
       }
 
