@@ -10,4 +10,6 @@ contextBridge.exposeInMainWorld('electronAPI', {
   endSession:           (data)   => ipcRenderer.invoke('end-session', data),
   pauseSession:         ()       => ipcRenderer.invoke('pause-session'),
   updateFocusState:     (state)  => ipcRenderer.invoke('update-focus-state', state),
+  getSystemIdleSecs:    ()       => ipcRenderer.invoke('get-system-idle-secs'),
+  overlayPause:         ()       => ipcRenderer.invoke('overlay-pause'),
 });

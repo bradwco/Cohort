@@ -1,14 +1,8 @@
-import {
-  BrowserWindow,
-  desktopCapturer,
-  ipcMain,
-  screen,
-  shell,
-} from "electron";
-import * as fs from "fs";
-import * as nodePath from "path";
-import * as os from "os";
-import { CH, PUSH } from "./channels";
+import { BrowserWindow, desktopCapturer, ipcMain, powerMonitor, screen, shell } from 'electron';
+import * as fs from 'fs';
+import * as nodePath from 'path';
+import * as os from 'os';
+import { CH, PUSH } from './channels';
 import {
   getProfile,
   updateProfile,
@@ -44,7 +38,13 @@ import {
   resetPauseStats,
   resumePause,
   markPaused,
-} from "../mqtt";
+} from '../mqtt';
+import {
+  calculateFlowScore,
+  finishSessionMetrics,
+  recordFocusState,
+  startSessionMetrics,
+} from '../session_metrics';
 
 let activePlannedDurationMinutes = 50;
 
@@ -129,28 +129,28 @@ export function registerIpcHandlers(options: IpcHandlerOptions = {}): void {
   });
 
   // Sessions
-  ipcMain.handle(CH.SESSION_START, async (_e, userId, group, mins) => {
-    activePlannedDurationMinutes = mins;
-
-    const session = await startSession(userId, group, mins);
-
-    if (session) {
-      setActiveSessionId(session.id);
-      setActiveSessionDetails({
-        sessionStartedAt: session.started_at,
-        workflowGroup: group,
-        plannedDurationMinutes: mins,
-      });
-    }
-
-    return session;
-  });
-
-  ipcMain.handle(CH.SESSION_END, async (_e, pause, score, summary) => {
+  ipcMain.handle(
+    CH.SESSION_START,
+    async (_e, userId: string, workflowGroup: string, durationMins: number) => {
+      activePlannedDurationMinutes = durationMins;
+      const session = await startSession(userId, workflowGroup, durationMins);
+      if (session) {
+        setActiveSessionId(session.id);
+        setActiveSessionDetails({
+          sessionStartedAt: session.started_at,
+          workflowGroup,
+          plannedDurationMinutes: durationMins,
+        });
+        startSessionMetrics(session.id, session.started_at);
+      }
+      return session;
+    },
+  );
+  ipcMain.handle(CH.SESSION_END, async (_e, pauseMinutes: number, flowScore: number, aiSummary: string) => {
     const sessionId = getActiveSessionId();
     if (!sessionId) return;
-
-    await endSession(sessionId, pause, score, summary);
+    const metrics = finishSessionMetrics(sessionId);
+    await endSession(sessionId, pauseMinutes, metrics ? calculateFlowScore(metrics) : flowScore, aiSummary, undefined, metrics ?? undefined);
     setActiveSessionId(null);
   });
 
@@ -203,43 +203,38 @@ export function registerIpcHandlers(options: IpcHandlerOptions = {}): void {
   // External links (still allowed)
   ipcMain.handle(CH.OPEN_EXTERNAL, (_e, url) => shell.openExternal(url));
 
-  // AUTH WINDOW (FIXED: stays inside Electron)
+  // AUTH WINDOW (stays inside Electron)
   ipcMain.handle(CH.OPEN_AUTH_WINDOW, (event, url) =>
     openAuthWindow(url, BrowserWindow.fromWebContents(event.sender)),
   );
 
   // Overlay
-  ipcMain.on("set-ignore-mouse-events", (event, ignore) => {
-    BrowserWindow.fromWebContents(event.sender)?.setIgnoreMouseEvents(ignore, {
-      forward: true,
-    });
+  ipcMain.on('set-ignore-mouse-events', (event, ignore: boolean) => {
+    BrowserWindow.fromWebContents(event.sender)?.setIgnoreMouseEvents(ignore, { forward: true });
   });
 
   // Config
-  ipcMain.handle("get-config", () => {
+  ipcMain.handle('get-config', () => {
     const snapshot = getActiveSessionSnapshot();
-
     return {
-      SESSION_STARTED_AT: snapshot.sessionStartedAt ?? "",
+      SESSION_STARTED_AT: snapshot.sessionStartedAt ?? '',
       TOTAL_PAUSE_MS: snapshot.totalPauseMs,
-      ACTIVE_WORKFLOW_GROUP: snapshot.workflowGroup ?? "",
+      ACTIVE_WORKFLOW_GROUP: snapshot.workflowGroup ?? '',
 
-      GEMINI_API_KEY: import.meta.env.GEMINI_API_KEY ?? "",
-      LOCAL_VLM_URL:
-        import.meta.env.LOCAL_VLM_URL ?? "http://127.0.0.1:11434/api/chat",
-      LOCAL_VLM_MODEL: import.meta.env.LOCAL_VLM_MODEL ?? "moondream",
-      SUPABASE_URL: import.meta.env.SUPABASE_URL ?? "",
-      SUPABASE_ANON_KEY: import.meta.env.SUPABASE_ANON_KEY ?? "",
+      GEMINI_API_KEY: (import.meta.env.GEMINI_API_KEY as string) ?? '',
+      LOCAL_VLM_URL: (import.meta.env.LOCAL_VLM_URL as string) ?? 'http://127.0.0.1:11434/api/chat',
+      LOCAL_VLM_MODEL: (import.meta.env.LOCAL_VLM_MODEL as string) ?? 'moondream',
+      SUPABASE_URL: (import.meta.env.SUPABASE_URL as string) ?? '',
+      SUPABASE_ANON_KEY: (import.meta.env.SUPABASE_ANON_KEY as string) ?? '',
 
       USER_ID: getOverlayUserId(),
-      SESSION_ID: getActiveSessionId() ?? "",
-      PLANNED_DURATION_MINUTES:
-        snapshot.plannedDurationMinutes ?? activePlannedDurationMinutes,
+      SESSION_ID: getActiveSessionId() ?? '',
+      PLANNED_DURATION_MINUTES: snapshot.plannedDurationMinutes ?? activePlannedDurationMinutes,
     };
   });
 
   // create-session
-  ipcMain.handle("create-session", async (_e, { plannedDurationMinutes, workflowGroup }) => {
+  ipcMain.handle('create-session', async (_e, { plannedDurationMinutes, workflowGroup }: { plannedDurationMinutes: number; workflowGroup: string }) => {
     const userId = getOverlayUserId();
     if (!userId) return null;
 
@@ -254,9 +249,47 @@ export function registerIpcHandlers(options: IpcHandlerOptions = {}): void {
         workflowGroup,
         plannedDurationMinutes,
       });
+      startSessionMetrics(session.id, session.started_at);
     }
 
     return session?.id ?? null;
+  });
+
+  ipcMain.handle('end-session', async (_e, { sessionId, flowScore, conversationHistory }: { sessionId: string; flowScore: number | null; conversationHistory: unknown[] }) => {
+    if (!sessionId) return;
+    const userId = getOverlayUserId();
+    const metrics = finishSessionMetrics(sessionId);
+    await endSession(
+      sessionId,
+      0,
+      metrics ? calculateFlowScore(metrics) : flowScore ?? 0,
+      '',
+      conversationHistory,
+      metrics ?? undefined,
+    );
+    if (userId) await updateProfile(userId, { hardware_status: 'offline' });
+    setActiveSessionId(null);
+    resetPauseStats();
+    for (const win of BrowserWindow.getAllWindows()) {
+      win.webContents.send('mqtt:own-state', { status: 'offline' });
+    }
+  });
+
+  ipcMain.handle('get-system-idle-secs', () => powerMonitor.getSystemIdleTime());
+
+  ipcMain.handle('overlay-pause', async () => {
+    const userId = getOverlayUserId();
+    if (!userId) return;
+    await simulateHardwareEvent(userId, { status: 'undocked' });
+  });
+
+  ipcMain.handle('update-focus-state', (_e, state: string) => {
+    const userId = getOverlayUserId();
+    if (!userId) return;
+    recordFocusState(state);
+    return updateProfile(userId, {
+      focus_state: state as 'productive' | 'distracted' | 'idle' | 'offline',
+    });
   });
 }
 

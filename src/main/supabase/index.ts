@@ -30,7 +30,14 @@ export interface Session {
   pause_minutes_used: number;
   flow_score: number | null;
   ai_summary: string | null;
-  conversation_history: unknown[] | null;
+  conversation_history?: unknown[] | null;
+  productive_duration_seconds?: number | null;
+  distracted_duration_seconds?: number | null;
+  distracted_occurrences?: number | null;
+  idle_duration_seconds?: number | null;
+  idle_occurrences?: number | null;
+  phone_lift_count?: number | null;
+  total_work_duration_seconds?: number | null;
 }
 
 export interface Friendship {
@@ -472,6 +479,18 @@ export async function endSession(
   flowScore: number,
   aiSummary: string,
   conversationHistory?: unknown[],
+  metrics?: Partial<
+    Pick<
+      Session,
+      | 'productive_duration_seconds'
+      | 'distracted_duration_seconds'
+      | 'distracted_occurrences'
+      | 'idle_duration_seconds'
+      | 'idle_occurrences'
+      | 'phone_lift_count'
+      | 'total_work_duration_seconds'
+    >
+  >,
 ): Promise<void> {
   const { error } = await getSupabaseClient()
     .from('sessions')
@@ -481,6 +500,7 @@ export async function endSession(
       flow_score: flowScore,
       ai_summary: aiSummary,
       ...(conversationHistory !== undefined && { conversation_history: conversationHistory }),
+      ...(metrics ?? {}),
     })
     .eq('id', sessionId);
   if (error) console.error('endSession:', error.message);

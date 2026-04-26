@@ -46,13 +46,13 @@ export function HwSimulator({
   const [cohortsLoaded, setCohortsLoaded] = useState(false);
   const [users, setUsers] = useState<SimUser[]>([]);
   const [userId, setUserId] = useState('');
-  const [duration, setDuration] = useState(initialDuration);
   const [status, setStatus] = useState<OrbStatus>('offline');
   const [log, setLog] = useState<string[]>([]);
   const [sessionStartedAt, setSessionStartedAt] = useState<string | null>(null);
-  const [sessionDuration, setSessionDuration] = useState(initialDuration);
   const [sessionWorkflow, setSessionWorkflow] = useState<string>('Focus Session');
   const [sessionNote, setSessionNote] = useState('');
+  const [duration, setDuration] = useState(initialDuration);
+  const [sessionDuration, setSessionDuration] = useState(initialDuration);
 
   async function loadCohorts() {
     if (!window.api || !currentUserId) return;
@@ -122,11 +122,10 @@ export function HwSimulator({
       setUserId(users[0]!.id);
       setStatus('offline');
       setSessionStartedAt(null);
-      setSessionDuration(initialDuration);
       setSessionWorkflow(activeGroup ?? 'Focus Session');
       setSessionNote('');
     }
-  }, [activeGroup, initialDuration, userId, users]);
+  }, [activeGroup, userId, users]);
 
   useEffect(() => {
     if (!window.api) return;
@@ -135,7 +134,8 @@ export function HwSimulator({
       if (data.status === 'offline') {
         setStatus('offline');
         setSessionStartedAt(null);
-        setSessionDuration(initialDuration);
+      } else if (data.status === 'undocked') {
+        setStatus('undocked');
       }
     });
     return () => { cleanup(); };
@@ -178,7 +178,7 @@ export function HwSimulator({
       duration,
       workflowGroup,
       sessionStartedAt: nextStartedAt,
-      plannedDurationMinutes: sessionDuration || duration,
+      plannedDurationMinutes: duration,
     };
 
     if (await fire(payload)) {
@@ -218,7 +218,6 @@ export function HwSimulator({
   async function endSession() {
     try {
       const wasOwnUser = Boolean(currentUserId && userId === currentUserId);
-      await fire({ status: 'offline' });
 
       if (wasOwnUser) {
         const stats = await window.api.getPauseStats();
@@ -227,10 +226,11 @@ export function HwSimulator({
         onSessionEnd();
       }
 
+      await fire({ status: 'offline' });
+
       push('OK session ended');
       setStatus('offline');
       setSessionStartedAt(null);
-      setSessionDuration(duration);
       setSessionWorkflow(activeGroup ?? 'Focus Session');
       setSessionNote('');
     } catch (err) {
@@ -287,7 +287,6 @@ export function HwSimulator({
                     setUserId(u.id);
                     setStatus('offline');
                     setSessionStartedAt(null);
-                    setSessionDuration(duration);
                     setSessionWorkflow(activeGroup ?? 'Focus Session');
                     setSessionNote('');
                   }}
@@ -400,13 +399,6 @@ export function HwSimulator({
               className="rounded border border-amber/40 bg-amber/10 px-2 py-1.5 text-[10px] text-amber transition-opacity disabled:opacity-30"
             >
               Dock Phone
-            </button>
-            <button
-              disabled={status !== 'docked' || !userId}
-              onClick={undock}
-              className="rounded border border-cool-blue/40 bg-cool-blue/10 px-2 py-1.5 text-[10px] text-cool-blue transition-opacity disabled:opacity-30"
-            >
-              Lift Phone
             </button>
             <button
               disabled={status !== 'undocked' || !userId}

@@ -11,11 +11,20 @@ type DBSession = {
   duration_mins?: number;          // mock data only
   workflow_group?: string;
   flow_score?: number | null;
-  pause_minutes_used?: number;     // real DB field
-  pause_minutes?: number;          // mock data only
+  pause_minutes_used?: number;
+  pause_minutes?: number;
   ai_summary?: string | null;
+  productive_duration_seconds?: number;
+  distracted_duration_seconds?: number;
+  distracted_occurrences?: number;
+  idle_duration_seconds?: number;
+  idle_occurrences?: number;
+  phone_lift_count?: number;
+  total_work_duration_seconds?: number;
   conversation_history?: unknown[] | null;
 };
+
+type ChatMessage = Session['chatLog'][number];
 
 type CalendarCell = {
   date: Date;
@@ -47,26 +56,86 @@ function dbSessionToRow(s: DBSession, index: number): Session {
   const date = new Date(s.started_at);
   const label = `${date.toLocaleDateString('en-US', { weekday: 'long' })} / ${date.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true }).toLowerCase()}`;
 
-  let dur = '--';
-  if (s.ended_at) {
+  const totalSeconds = s.total_work_duration_seconds ?? durationFromDates(s.started_at, s.ended_at ?? undefined);
+  let dur: string;
+  if (totalSeconds != null) {
+    dur = formatDuration(totalSeconds);
+  } else if (s.ended_at) {
     const elapsedMins = Math.round((Date.parse(s.ended_at) - Date.parse(s.started_at)) / 60000);
     dur = fmtDuration(elapsedMins);
   } else if (s.duration_mins != null) {
     dur = fmtDuration(s.duration_mins);
   } else if (s.planned_duration_minutes != null) {
     dur = `~${fmtDuration(s.planned_duration_minutes)}`;
+  } else {
+    dur = '--';
   }
-
   return {
     date: label,
     dur,
-    flow: s.flow_score ?? Math.floor(70 + Math.random() * 28),
-    lifts: s.pause_minutes_used ?? s.pause_minutes ?? Math.floor(Math.random() * 12),
+    flow: s.flow_score ?? 0,
+    lifts: s.phone_lift_count ?? 0,
     task: s.workflow_group ?? 'focus session',
     color: TASK_COLORS[index % TASK_COLORS.length] ?? '#E8A87C',
-    summary: s.ai_summary ?? undefined,
+    productive: formatDuration(s.productive_duration_seconds ?? 0),
+    distracted: formatDuration(s.distracted_duration_seconds ?? 0),
+    distractedOccurrences: s.distracted_occurrences ?? 0,
+    idle: formatDuration(s.idle_duration_seconds ?? 0),
+    idleOccurrences: s.idle_occurrences ?? 0,
+    total: totalSeconds != null ? formatDuration(totalSeconds) : dur,
+    summary: s.ai_summary ?? null,
+    chatLog: normalizeConversationHistory(s.conversation_history),
     conversationHistory: s.conversation_history ?? undefined,
   };
+}
+
+function normalizeConversationHistory(raw: unknown): ChatMessage[] {
+  if (!Array.isArray(raw)) return [];
+
+  return raw.flatMap((item): ChatMessage[] => {
+    if (!item || typeof item !== 'object') return [];
+    const entry = item as { role?: unknown; parts?: unknown; content?: unknown; text?: unknown };
+    const role = entry.role === 'model' || entry.role === 'assistant'
+      ? 'assistant'
+      : entry.role === 'user'
+        ? 'user'
+        : 'system';
+    const text = extractConversationText(entry);
+    return text ? [{ role, text }] : [];
+  });
+}
+
+function extractConversationText(entry: { parts?: unknown; content?: unknown; text?: unknown }): string {
+  if (typeof entry.text === 'string') return entry.text.trim();
+  if (typeof entry.content === 'string') return entry.content.trim();
+  if (!Array.isArray(entry.parts)) return '';
+
+  return entry.parts
+    .map((part) => {
+      if (!part || typeof part !== 'object') return '';
+      const maybeText = (part as { text?: unknown }).text;
+      return typeof maybeText === 'string' ? maybeText.trim() : '';
+    })
+    .filter(Boolean)
+    .join('\n')
+    .trim();
+}
+
+function durationFromDates(startedAt: string, endedAt?: string): number | null {
+  if (!endedAt) return null;
+  const started = Date.parse(startedAt);
+  const ended = Date.parse(endedAt);
+  if (!Number.isFinite(started) || !Number.isFinite(ended)) return null;
+  return Math.max(0, Math.round((ended - started) / 1000));
+}
+
+function formatDuration(totalSeconds: number): string {
+  const seconds = Math.max(0, Math.round(totalSeconds));
+  const hours = Math.floor(seconds / 3600);
+  const minutes = Math.floor((seconds % 3600) / 60);
+  if (hours > 0) return `${hours}h ${minutes}m`;
+  if (minutes > 0) return `${minutes}m`;
+  return `${seconds}s`;
 }
 
 const MOCK_DB_SESSIONS: DBSession[] = [
@@ -75,15 +144,31 @@ const MOCK_DB_SESSIONS: DBSession[] = [
     started_at: '2026-04-25T20:14:00',
     duration_mins: 124,
     flow_score: 94,
-    pause_minutes: 4,
+    phone_lift_count: 4,
+    productive_duration_seconds: 6420,
+    distracted_duration_seconds: 540,
+    distracted_occurrences: 2,
+    idle_duration_seconds: 480,
+    idle_occurrences: 1,
+    total_work_duration_seconds: 7440,
     workflow_group: 'reading / biochem',
+    conversation_history: [
+      { role: 'user', parts: [{ text: 'Can you help me summarize this pathway?' }, { text: '[screenshot]' }] },
+      { role: 'model', parts: [{ text: 'Yes. Focus on the enzyme sequence and the regulation points first.' }] },
+    ],
   },
   {
     id: 'mock-2',
     started_at: '2026-04-25T14:30:00',
     duration_mins: 90,
     flow_score: 88,
-    pause_minutes: 7,
+    phone_lift_count: 7,
+    productive_duration_seconds: 4380,
+    distracted_duration_seconds: 600,
+    distracted_occurrences: 3,
+    idle_duration_seconds: 420,
+    idle_occurrences: 2,
+    total_work_duration_seconds: 5400,
     workflow_group: 'math / 200a pset',
   },
   {
@@ -91,7 +176,13 @@ const MOCK_DB_SESSIONS: DBSession[] = [
     started_at: '2026-04-24T21:45:00',
     duration_mins: 192,
     flow_score: 97,
-    pause_minutes: 2,
+    phone_lift_count: 2,
+    productive_duration_seconds: 10620,
+    distracted_duration_seconds: 360,
+    distracted_occurrences: 1,
+    idle_duration_seconds: 540,
+    idle_occurrences: 1,
+    total_work_duration_seconds: 11520,
     workflow_group: 'coding / cs188',
   },
   {
@@ -99,7 +190,13 @@ const MOCK_DB_SESSIONS: DBSession[] = [
     started_at: '2026-04-19T11:00:00',
     duration_mins: 48,
     flow_score: 71,
-    pause_minutes: 12,
+    phone_lift_count: 12,
+    productive_duration_seconds: 1980,
+    distracted_duration_seconds: 540,
+    distracted_occurrences: 4,
+    idle_duration_seconds: 360,
+    idle_occurrences: 2,
+    total_work_duration_seconds: 2880,
     workflow_group: 'reading / biochem',
   },
 ];

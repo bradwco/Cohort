@@ -1,6 +1,7 @@
 import mqtt, { MqttClient } from 'mqtt';
 import { BrowserWindow } from 'electron';
 import { updateProfile, startSession, logActivity } from '../supabase';
+import { recordPhoneLift, startSessionMetrics } from '../session_metrics';
 
 type OrbPayload = {
   status?: 'docked' | 'undocked' | 'redocked' | 'offline';
@@ -70,6 +71,10 @@ export function getActiveSessionSnapshot(): {
     plannedDurationMinutes: activePlannedDurationMinutes,
     totalPauseMs,
   };
+}
+
+export function getSessionStartedAt(): string | null {
+  return activeSessionStartedAt;
 }
 
 export function initMqtt(userId: string): void {
@@ -169,7 +174,10 @@ async function handleOwnOrbState(payload: OrbPayload): Promise<void> {
 
     if (!activeSessionId && currentUserId) {
       const session = await startSession(currentUserId, workflowGroup, duration);
-      if (session) activeSessionId = session.id;
+      if (session) {
+        activeSessionId = session.id;
+        startSessionMetrics(session.id, session.started_at);
+      }
     }
 
     await updateProfile(currentUserId!, {
@@ -195,7 +203,9 @@ async function handleOwnOrbState(payload: OrbPayload): Promise<void> {
   }
 
   if (status === 'undocked') {
+    const wasPaused = pauseStart !== null;
     pauseStart = payload.pauseStart ?? Date.now();
+    if (!wasPaused) recordPhoneLift();
 
     if (activeSessionId && currentUserId) {
       await logActivity(activeSessionId, currentUserId, 'hardware_break', { sensor: 'undocked' });
@@ -229,6 +239,7 @@ async function handleOwnOrbState(payload: OrbPayload): Promise<void> {
     };
     broadcastToRenderer('mqtt:own-state', ownPayload);
     publishOwnState({ ...ownPayload, origin: 'desktop-sim' });
+    onDockedCallback?.();
     return;
   }
 
