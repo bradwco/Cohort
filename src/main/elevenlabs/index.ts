@@ -157,19 +157,19 @@ export async function triggerVoiceEvent(
   }
 
   const text = buildMessage(event, { username: currentUsername, workflowGroup: ctx.workflowGroup, memberName });
-  const buffer = await generateSpeech(text, settings);
-  if (buffer) broadcastAudio(buffer);
+  const result = await generateSpeech(text, settings);
+  if ('buffer' in result) broadcastAudio(result.buffer);
 }
 
 export async function testVoice(settingsOverride?: Partial<ElevenLabsSettings>, text?: string): Promise<boolean> {
   const settings = { ...getElevenLabsSettings(), ...settingsOverride };
   if (!settings.apiKey || !settings.voiceId) return false;
-  const buffer = await generateSpeech(
+  const result = await generateSpeech(
     text ?? `Hey ${currentUsername || 'there'}, Cohort voice is ready. Focus mode activated.`,
     settings,
   );
-  if (buffer) {
-    broadcastAudio(buffer);
+  if ('buffer' in result) {
+    broadcastAudio(result.buffer);
     return true;
   }
   return false;

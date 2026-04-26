@@ -212,7 +212,7 @@
         }
       })();
 
-      // ── Friend avatars (poll every 30s) ────────────────────────────────
+      // ── Friend avatars (poll every 5s) ─────────────────────────────────
       const FRIEND_SYNC_MS = 5_000;
       const friendAvatarMap = {}; // userId → { el: HTMLElement, focusState: string | null }
 
@@ -343,22 +343,7 @@
       }
 
       syncFriendAvatars();
-      setInterval(syncFriendAvatars, 30_000);
-
-      document.getElementById("stop").addEventListener("click", async () => {
-        try {
-          window.electronAPI.updateFocusState("idle").catch(() => {});
-          if (gemini?.history?.length) {
-            await window.electronAPI.saveConversationHistory(gemini.history).catch(() => {});
-          }
-          await window.electronAPI.pauseSession();
-        } catch (e) {
-          console.warn("[session] pause failed:", e.message);
-        } finally {
-          window.close();
-        }
-        window.close();
-      });
+      setInterval(syncFriendAvatars, FRIEND_SYNC_MS);
 
       let lastActivityTime = Date.now();
       // Filters out hand-tremor / wireless-mouse jitter so the overlay
@@ -535,7 +520,7 @@
       // ── Focus state tracking ───────────────────────────────────────────
       // Local-first pipeline: cheap thumbnail capture -> perceptual hash gate ->
       // localhost vision model -> rolling five-minute productivity score.
-      const IDLE_MS = 30_000;
+      const IDLE_MS = 15_000;
       const IDLE_WAKE_MS = 8_000;
       const ACTIVE_CHECK_MS = 1_000;
       const CLASSIFY_COOLDOWN = 2_500;
@@ -596,8 +581,7 @@
           //   3. content change    — screen pixels changing (video playback detection)
           const sysSec = await window.electronAPI.getSystemIdleSecs();
           const isActive = sysSec * 1000 < IDLE_MS
-            || (now - lastActivityTime) < IDLE_MS
-            || (now - lastContentChangeTime) < IDLE_MS;
+            || (now - lastActivityTime) < IDLE_MS;
           const userActiveForIdleWake = sysSec * 1000 < IDLE_WAKE_MS;
 
           // When idle: require sustained activity (ACTIVE_STREAK_REQUIRED

@@ -338,6 +338,7 @@ export function registerIpcHandlers(options: IpcHandlerOptions = {}): void {
     const userId = getOverlayUserId();
     if (!userId) return;
     recordFocusState(state);
+    sendFocusStateToHardwareSerial(state);
     if (state === 'idle') void triggerVoiceEvent('idle');
     else if (state === 'distracted') void triggerVoiceEvent('distracted');
     return updateProfile(userId, {

@@ -1,7 +1,7 @@
 import mqtt, { MqttClient } from 'mqtt';
 import { BrowserWindow } from 'electron';
-import { updateProfile, startSession, logActivity } from '../supabase';
-import { recordPhoneLift, startSessionMetrics } from '../session_metrics';
+import { updateProfile, startSession, endSession as finishSupabaseSession, logActivity } from '../supabase';
+import { calculateFlowScore, finishSessionMetrics, recordPhoneLift, startSessionMetrics } from '../session_metrics';
 import { triggerVoiceEvent } from '../elevenlabs';
 
 type OrbPayload = {
@@ -245,6 +245,7 @@ async function handleOwnOrbState(payload: OrbPayload): Promise<void> {
     };
     broadcastToRenderer('mqtt:own-state', ownPayload);
     publishOwnState({ ...ownPayload, origin: 'desktop-sim' });
+    onOfflineCallback?.();
     void triggerVoiceEvent('phone_lift');
     return;
   }

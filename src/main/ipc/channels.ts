@@ -70,5 +70,6 @@ export const PUSH = {
   FRIEND_NUDGE: 'friends:nudge',
   DEEP_LINK: 'app:deep-link',
   SESSION_PAUSED: 'session:paused',
+  HARDWARE_SERIAL_STATUS: 'hardware:serial-status',
   PLAY_AUDIO: 'elevenlabs:play-audio',
 } as const;
