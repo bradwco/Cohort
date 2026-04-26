@@ -4,8 +4,7 @@ const TITLES: Record<ViewId, { t: string; s: string }> = {
   dashboard: { t: 'dashboard', s: 'your focus presence at a glance' },
   history: { t: 'session history', s: 'sessions, scored & summarized' },
   friends: { t: 'friends', s: 'your cohort network' },
-  orb: { t: 'orb', s: 'customize your focus signal' },
-  settings: { t: 'settings', s: 'account and preferences' },
+  settings: { t: 'settings', s: 'account, focus, and orb preferences' },
 };
 
 type Props = {
@@ -18,15 +17,15 @@ type Props = {
 export function Header({ view, sessionActive, telemetryOpen, onToggleTelemetry }: Props) {
   const meta = TITLES[view];
   return (
-    <div className="[-webkit-app-region:drag] mb-8 flex items-start justify-between gap-5 border-b border-line px-10 pb-7 pt-8">
+    <div className="[-webkit-app-region:drag] mb-5 flex items-start justify-between gap-5 border-b border-line px-10 pb-4 pt-5">
       <div>
-        <div className="mb-2 font-mono text-[10px] uppercase tracking-[0.16em] text-ink-faint">
+        <div className="mb-1.5 font-mono text-[9px] uppercase tracking-[0.16em] text-ink-faint">
           cohort / {view}
         </div>
-        <h1 className="m-0 font-serif text-[38px] font-light italic leading-[1.1] tracking-[-0.03em]">
+        <h1 className="m-0 font-serif text-[30px] font-light italic leading-[1.05]">
           {meta.t}
         </h1>
-        <div className="mt-1.5 font-serif text-sm italic text-ink-dim">{meta.s}</div>
+        <div className="mt-1 font-serif text-[13px] italic text-ink-dim">{meta.s}</div>
       </div>
       <div className="flex items-center gap-3">
         {sessionActive && (

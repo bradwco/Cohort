@@ -128,25 +128,24 @@
     <script src="ai/gemini.js"></script>
     <script src="ai/classifier.js"></script>
     <script>
-      // ── Timer (stopwatch) ──────────────────────────────────────────────
-      let secsElapsed = 0;
-      let goalSecs = 50 * 60; // default 50 min, updated from config
-      let goalReached = false;
+      // ── Timer (wallclock-synced stopwatch) ─────────────────────────────
+      // Both the overlay timer and the dashboard timer derive their value
+      // from (Date.now() - sessionStartedAt - totalPauseMs), so they stay
+      // in sync across pause / re-dock cycles instead of drifting apart
+      // due to two independent setInterval clocks.
+      let sessionStartedAtMs = Date.now();
+      let totalPauseMs = 0;
       const timerEl = document.getElementById("timer");
       timerEl.textContent = "00:00";
 
-      const tick = setInterval(() => {
-        secsElapsed++;
+      function renderTimer() {
+        const elapsedSec = Math.max(0, Math.floor((Date.now() - sessionStartedAtMs - totalPauseMs) / 1000));
         timerEl.textContent =
-          String(Math.floor(secsElapsed / 60)).padStart(2, "0") +
+          String(Math.floor(elapsedSec / 60)).padStart(2, "0") +
           ":" +
-          String(secsElapsed % 60).padStart(2, "0");
-        if (!goalReached && secsElapsed >= goalSecs) {
-          goalReached = true;
-          timerEl.style.color = "var(--accent)";
-          timerEl.title = "Session goal reached!";
-        }
-      }, 1000);
+          String(elapsedSec % 60).padStart(2, "0");
+      }
+      setInterval(renderTimer, 1000);
 
       let sessionId = null;
       let ownAvatarEl = null;
@@ -154,23 +153,16 @@
       (async () => {
         try {
           const cfg = await window.electronAPI.getConfig();
-          if (cfg.PLANNED_DURATION_MINUTES) {
-            goalSecs = cfg.PLANNED_DURATION_MINUTES * 60;
-          }
           if (cfg.SESSION_STARTED_AT) {
-            const elapsedMs = Date.now() - Date.parse(cfg.SESSION_STARTED_AT) - (cfg.TOTAL_PAUSE_MS || 0);
-            secsElapsed = Math.max(0, Math.floor(elapsedMs / 1000));
-            timerEl.textContent =
-              String(Math.floor(secsElapsed / 60)).padStart(2, "0") +
-              ":" +
-              String(secsElapsed % 60).padStart(2, "0");
+            sessionStartedAtMs = Date.parse(cfg.SESSION_STARTED_AT) || Date.now();
+            totalPauseMs = cfg.TOTAL_PAUSE_MS || 0;
+            renderTimer();
           }
           if (cfg.SESSION_ID) {
             sessionId = cfg.SESSION_ID;
             console.log("[session] using existing:", sessionId);
           } else {
             sessionId = await window.electronAPI.createSession({
-              plannedDurationMinutes: cfg.PLANNED_DURATION_MINUTES || 50,
               workflowGroup: "Focus Session",
             });
             console.log("[session] created:", sessionId);
@@ -374,6 +366,11 @@
       });
 
       let lastActivityTime = Date.now();
+      // Filters out hand-tremor / wireless-mouse jitter so the overlay
+      // doesn't treat sub-pixel drift as "activity" and exit idle state.
+      const MOUSE_JITTER_PX = 6;
+      let lastMouseX = -1;
+      let lastMouseY = -1;
 
       // ── Notch drag (X + Y) ─────────────────────────────────────────────
       const wrapper = document.getElementById("notch-wrapper");
@@ -433,7 +430,11 @@
       });
 
       document.addEventListener("mousemove", (e) => {
-        lastActivityTime = Date.now();
+        if (lastMouseX < 0 || Math.hypot(e.clientX - lastMouseX, e.clientY - lastMouseY) >= MOUSE_JITTER_PX) {
+          lastActivityTime = Date.now();
+          lastMouseX = e.clientX;
+          lastMouseY = e.clientY;
+        }
         if (notchDragging) {
           wrapper.style.left = e.clientX - notchOffX + "px";
           wrapper.style.top = e.clientY - notchOffY + "px";
@@ -543,6 +544,10 @@
       const ACTIVE_CHECK_MS = 5_000;
       const CLASSIFY_COOLDOWN = 10_000;
       const HASH_DIFF_THRESHOLD = 13; // roughly 5% of a 16x16 average hash
+      // Require N consecutive 1s polls of detected activity before exiting
+      // idle. Combined with the overlay mousemove jitter filter above, this
+      // suppresses "tiny vibrations" from popping the user out of idle.
+      const ACTIVE_STREAK_REQUIRED = 3;
 
       let focusClassifier = null;
       let focusGate = null;
@@ -552,6 +557,7 @@
       let classifyInFlight    = false;
       let currentFocusState   = 'productive';
       let lastContentChangeTime = 0; // updated when screen content changes (video detection)
+      let activeStreak = 0;
 
       function setFocusState(state) {
         if (state === currentFocusState) return;
@@ -594,11 +600,24 @@
             || (now - lastActivityTime) < IDLE_MS
             || (now - lastContentChangeTime) < IDLE_MS;
 
-          // When idle: poll every 1s for any activity to exit
+          // When idle: require sustained activity (ACTIVE_STREAK_REQUIRED
+          // consecutive 1s polls) before flipping back to productive, so a
+          // single sub-second jitter doesn't pop the user out of idle.
           if (currentFocusState === 'idle') {
-            if (isActive) setFocusState('productive');
+            if (isActive) {
+              activeStreak += 1;
+              if (activeStreak >= ACTIVE_STREAK_REQUIRED) {
+                activeStreak = 0;
+                setFocusState('productive');
+              } else if (dbg) {
+                dbg.textContent = `idle · waking (${activeStreak}/${ACTIVE_STREAK_REQUIRED})`;
+              }
+            } else {
+              activeStreak = 0;
+            }
             return;
           }
+          activeStreak = 0;
 
           // Not idle: throttle the rest to ACTIVE_CHECK_MS
           if (now - lastActiveCheckTime < ACTIVE_CHECK_MS) return;
@@ -616,8 +635,16 @@
 
           classifyInFlight = true;
           lastClassifyTime = now;
-          const thumbUrl = await window.electronAPI.takeThumbnail();
+          let thumbUrl;
+          try {
+            thumbUrl = await window.electronAPI.takeThumbnail();
+          } catch (err) {
+            if (dbg) dbg.textContent = "screenshot error: " + (err?.message ?? err);
+            classifyInFlight = false;
+            return;
+          }
           if (!thumbUrl) {
+            if (dbg) dbg.textContent = "screenshot returned null";
             classifyInFlight = false;
             return;
           }
@@ -648,6 +675,8 @@
             });
         } catch (e) {
           classifyInFlight = false;
+          const dbg = document.getElementById('focus-debug');
+          if (dbg) dbg.textContent = "focus error: " + (e?.message ?? e);
           console.warn("[focus] error:", e.message);
         }
       }

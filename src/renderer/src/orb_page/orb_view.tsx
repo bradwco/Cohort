@@ -9,8 +9,6 @@ type Props = {
   setBreathSpeed: (v: number) => void;
   taskColor: string;
   setTaskColor: (v: string) => void;
-  nudgeDnd: boolean;
-  setNudgeDnd: (v: boolean) => void;
 };
 
 const BRIGHTNESS_LABELS = ['off', 'dim', 'medium', 'bright', 'max'];
@@ -34,8 +32,6 @@ export function OrbView({
   setBreathSpeed,
   taskColor,
   setTaskColor,
-  nudgeDnd,
-  setNudgeDnd,
 }: Props) {
   return (
     <div className="grid grid-cols-2 gap-6">
@@ -85,40 +81,6 @@ export function OrbView({
         </div>
       </Section>
 
-      <Section title="nudge reactions" meta={nudgeDnd ? 'silenced' : 'enabled'}>
-        <button
-          type="button"
-          onClick={() => setNudgeDnd(!nudgeDnd)}
-          className={cn(
-            'flex w-full items-center gap-4 rounded-md border p-4 text-left transition-all hover:-translate-y-0.5',
-            nudgeDnd
-              ? 'border-amber/35 bg-amber/[0.08]'
-              : 'border-line bg-bg-deeper/60 hover:border-line-mid',
-          )}
-        >
-          <span
-            className={cn(
-              'flex h-5 w-9 items-center rounded-full border p-0.5 transition-colors',
-              nudgeDnd ? 'border-amber/40 bg-amber/20' : 'border-line-mid bg-white/[0.02]',
-            )}
-          >
-            <span
-              className={cn(
-                'h-3.5 w-3.5 rounded-full transition-transform',
-                nudgeDnd ? 'translate-x-4 bg-amber' : 'bg-ink-faint',
-              )}
-            />
-          </span>
-          <span>
-            <span className="block font-serif text-2xl italic text-ink">
-              {nudgeDnd ? 'do not disturb' : 'nudges on'}
-            </span>
-            <span className="mt-1 block font-mono text-[10px] uppercase tracking-[0.14em] text-ink-faint">
-              {nudgeDnd ? 'do not disturb - nudges silenced' : 'nudges on - friends can ping you'}
-            </span>
-          </span>
-        </button>
-      </Section>
     </div>
   );
 }
