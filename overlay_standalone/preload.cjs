@@ -8,4 +8,5 @@ contextBridge.exposeInMainWorld('electronAPI', {
   getConfig:            ()       => ipcRenderer.invoke('get-config'),
   createSession:        (data)   => ipcRenderer.invoke('create-session', data),
   endSession:           (data)   => ipcRenderer.invoke('end-session', data),
+  updateFocusState:     (state)  => ipcRenderer.invoke('update-focus-state', state),
 });

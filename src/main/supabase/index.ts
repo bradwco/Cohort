@@ -8,6 +8,7 @@ export interface Profile {
   current_activity: string;
   last_ping: string;
   avatar?: { skin: string; hair: string; eyes: string; outfit: string; accessory: string; background: string } | null;
+  focus_state?: 'productive' | 'distracted' | 'idle' | 'offline' | null;
 }
 
 export interface FriendRequest {
@@ -65,7 +66,7 @@ export async function getProfile(userId: string): Promise<Profile | null> {
 
 export async function updateProfile(
   userId: string,
-  updates: Partial<Pick<Profile, 'hardware_status' | 'current_activity' | 'orb_color' | 'last_ping' | 'avatar'>>,
+  updates: Partial<Pick<Profile, 'hardware_status' | 'current_activity' | 'orb_color' | 'last_ping' | 'avatar' | 'focus_state'>>,
 ): Promise<void> {
   const { error } = await getSupabaseClient()
     .from('profiles')
