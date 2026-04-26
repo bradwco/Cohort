@@ -336,6 +336,66 @@ export async function getCohorts(userId: string): Promise<Cohort[]> {
   }));
 }
 
+export async function leaveCohort(userId: string, cohortId: string): Promise<boolean> {
+  const { error } = await getSupabaseClient()
+    .from('cohort_members')
+    .delete()
+    .eq('cohort_id', cohortId)
+    .eq('user_id', userId);
+  if (error) {
+    console.error('leaveCohort:', error.message);
+    return false;
+  }
+  return true;
+}
+
+export async function getCohortMembers(cohortId: string): Promise<Array<Profile & { streak: number }>> {
+  const db = getSupabaseClient();
+  const { data: members, error } = await db
+    .from('cohort_members')
+    .select('user_id')
+    .eq('cohort_id', cohortId);
+
+  if (error || !members) return [];
+  const userIds = (members as Array<{ user_id: string }>).map((row) => row.user_id);
+  if (userIds.length === 0) return [];
+
+  const { data: profiles, error: profileError } = await db.from('profiles').select('*').in('id', userIds);
+  if (profileError) return [];
+
+  const thirtyDaysAgo = new Date();
+  thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+  const { data: sessions } = await db
+    .from('sessions')
+    .select('user_id, started_at')
+    .in('user_id', userIds)
+    .gte('started_at', thirtyDaysAgo.toISOString());
+
+  const sessionsByUser = new Map<string, Set<string>>();
+  for (const s of (sessions ?? []) as Array<{ user_id: string; started_at: string }>) {
+    const dateKey = new Date(s.started_at).toLocaleDateString();
+    if (!sessionsByUser.has(s.user_id)) sessionsByUser.set(s.user_id, new Set());
+    sessionsByUser.get(s.user_id)!.add(dateKey);
+  }
+
+  const today = new Date();
+  const computeStreak = (dateSet: Set<string>) => {
+    let streak = 0;
+    for (let i = 0; i < 31; i++) {
+      const d = new Date(today);
+      d.setDate(d.getDate() - i);
+      if (dateSet.has(d.toLocaleDateString())) streak++;
+      else break;
+    }
+    return streak;
+  };
+
+  return ((profiles ?? []) as Profile[]).map((p) => ({
+    ...p,
+    streak: computeStreak(sessionsByUser.get(p.id) ?? new Set()),
+  }));
+}
+
 export async function getSharedCohortProfiles(userId: string): Promise<Profile[]> {
   const db = getSupabaseClient();
   const { data: mine, error } = await db

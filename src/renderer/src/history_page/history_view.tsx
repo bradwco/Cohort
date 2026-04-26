@@ -6,12 +6,14 @@ import { cn } from '../shared_ui/cn';
 type DBSession = {
   id: string;
   started_at: string;
-  ended_at?: string;
-  duration_mins?: number;
+  ended_at?: string | null;
+  planned_duration_minutes?: number;
+  duration_mins?: number;          // mock data only
   workflow_group?: string;
-  flow_score?: number;
-  pause_minutes?: number;
-  ai_summary?: string;
+  flow_score?: number | null;
+  pause_minutes_used?: number;     // real DB field
+  pause_minutes?: number;          // mock data only
+  ai_summary?: string | null;
 };
 
 type CalendarCell = {
@@ -31,17 +33,34 @@ function localDateKey(date: Date): string {
   return `${y}-${m}-${d}`;
 }
 
+function fmtDuration(mins: number): string {
+  if (mins < 1) return '<1m';
+  const h = Math.floor(mins / 60);
+  const m = mins % 60;
+  if (h === 0) return `${m}m`;
+  if (m === 0) return `${h}h`;
+  return `${h}h ${m}m`;
+}
+
 function dbSessionToRow(s: DBSession, index: number): Session {
   const date = new Date(s.started_at);
   const label = `${date.toLocaleDateString('en-US', { weekday: 'long' })} / ${date.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true }).toLowerCase()}`;
-  const dur = s.duration_mins
-    ? `${Math.floor(s.duration_mins / 60)}h ${s.duration_mins % 60}m`
-    : '--';
+
+  let dur = '--';
+  if (s.ended_at) {
+    const elapsedMins = Math.round((Date.parse(s.ended_at) - Date.parse(s.started_at)) / 60000);
+    dur = fmtDuration(elapsedMins);
+  } else if (s.duration_mins != null) {
+    dur = fmtDuration(s.duration_mins);
+  } else if (s.planned_duration_minutes != null) {
+    dur = `~${fmtDuration(s.planned_duration_minutes)}`;
+  }
+
   return {
     date: label,
     dur,
     flow: s.flow_score ?? Math.floor(70 + Math.random() * 28),
-    lifts: s.pause_minutes ?? Math.floor(Math.random() * 12),
+    lifts: s.pause_minutes_used ?? s.pause_minutes ?? Math.floor(Math.random() * 12),
     task: s.workflow_group ?? 'focus session',
     color: TASK_COLORS[index % TASK_COLORS.length] ?? '#E8A87C',
   };

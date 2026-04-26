@@ -20,6 +20,8 @@ export const CH = {
   COHORT_CREATE: 'supabase:cohort-create',
   COHORT_JOIN: 'supabase:cohort-join',
   COHORT_SHARED_PROFILES: 'supabase:cohort-shared-profiles',
+  COHORT_MEMBERS: 'supabase:cohort-members',
+  COHORT_LEAVE: 'supabase:cohort-leave',
 
   // Supabase - sessions
   SESSION_START: 'supabase:session-start',
@@ -54,4 +56,5 @@ export const PUSH = {
   MQTT_FRIEND_STATE: 'mqtt:friend-state',
   FRIEND_NUDGE: 'friends:nudge',
   DEEP_LINK: 'app:deep-link',
+  SESSION_PAUSED: 'session:paused',
 } as const;

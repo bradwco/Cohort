@@ -40,6 +40,8 @@ type CohortRow = {
   member_count?: number;
 };
 
+type CohortMemberRow = ProfileRow & { streak: number };
+
 type FriendRequestRow = {
   id: string;
   requester_id: string;
@@ -86,6 +88,9 @@ export function FriendsView({ userId }: Props) {
   const [joinCode, setJoinCode] = useState('');
   const [cohortStatus, setCohortStatus] = useState<'idle' | 'saving' | 'error'>('idle');
   const [copiedCohortId, setCopiedCohortId] = useState<string | null>(null);
+  const [selectedCohortId, setSelectedCohortId] = useState<string | null>(null);
+  const [cohortMembersMap, setCohortMembersMap] = useState<Map<string, CohortMemberRow[]>>(new Map());
+  const [loadingCohortId, setLoadingCohortId] = useState<string | null>(null);
   const [friendRequests, setFriendRequests] = useState<FriendRequestRow[]>([]);
   const [sharedCohortProfiles, setSharedCohortProfiles] = useState<ProfileRow[]>([]);
 
@@ -253,6 +258,46 @@ export function FriendsView({ userId }: Props) {
     } else {
       setCohortStatus('error');
     }
+  }
+
+  async function handleLeaveCohort(cohort: CohortRow) {
+    if (!userId || !window.api) return;
+
+    // Optimistic: remove from UI immediately
+    setCohorts((prev) => prev.filter((c) => c.id !== cohort.id));
+    if (selectedCohortId === cohort.id) setSelectedCohortId(null);
+    setCohortMembersMap((prev) => {
+      const next = new Map(prev);
+      next.delete(cohort.id);
+      return next;
+    });
+
+    try {
+      await window.api.leaveCohort(userId, cohort.id);
+    } catch (err) {
+      console.error('[leaveCohort] server error:', err);
+    }
+  }
+
+  async function handleToggleCohort(cohort: CohortRow) {
+    if (selectedCohortId === cohort.id) {
+      setSelectedCohortId(null);
+      return;
+    }
+    setSelectedCohortId(cohort.id);
+    if (cohortMembersMap.has(cohort.id)) return;
+    setLoadingCohortId(cohort.id);
+    const members = await window.api.getCohortMembers(cohort.id);
+    const memberList = (members as CohortMemberRow[]) ?? [];
+    setCohortMembersMap((prev) => {
+      const next = new Map(prev);
+      next.set(cohort.id, memberList);
+      return next;
+    });
+    if (memberList.length > 0 && window.api) {
+      void window.api.subscribeFriends(memberList.map((m) => m.id));
+    }
+    setLoadingCohortId(null);
   }
 
   async function handleCopyCohort(cohort: CohortRow) {
@@ -528,28 +573,95 @@ export function FriendsView({ userId }: Props) {
             </div>
           ) : (
             <div className="flex flex-col gap-2">
-              {cohorts.map((cohort) => (
-                <div
-                  key={cohort.id}
-                  className="rounded border border-line bg-white/[0.02] px-3 py-2"
-                >
-                  <div className="flex items-start justify-between gap-2">
-                    <div className="min-w-0">
-                      <div className="truncate font-serif text-sm italic text-ink">{cohort.name}</div>
-                      <div className="mt-0.5 font-mono text-[9px] uppercase tracking-[0.1em] text-ink-faint">
-                        {cohort.member_count ?? 1} member{(cohort.member_count ?? 1) === 1 ? '' : 's'}
+              {cohorts.map((cohort) => {
+                const isOpen = selectedCohortId === cohort.id;
+                const members = cohortMembersMap.get(cohort.id);
+                const loading = loadingCohortId === cohort.id;
+                return (
+                  <div key={cohort.id} className="rounded border border-line bg-white/[0.02]">
+                    <div className="flex items-start gap-2 px-3 py-2">
+                      <button
+                        type="button"
+                        onClick={() => void handleToggleCohort(cohort)}
+                        className="min-w-0 flex-1 text-left transition-colors hover:opacity-80"
+                      >
+                        <div className="truncate font-serif text-sm italic text-ink">{cohort.name}</div>
+                        <div className="mt-0.5 font-mono text-[9px] uppercase tracking-[0.1em] text-ink-faint">
+                          {cohort.member_count ?? 1} member{(cohort.member_count ?? 1) === 1 ? '' : 's'}
+                          {' · '}
+                          <span className="text-amber/70">{isOpen ? 'collapse ▲' : 'view members ▼'}</span>
+                        </div>
+                      </button>
+                      <div className="flex shrink-0 gap-1">
+                        <button
+                          type="button"
+                          onClick={() => void handleCopyCohort(cohort)}
+                          className="rounded border border-line px-2 py-1 font-mono text-[9px] uppercase tracking-[0.1em] text-ink-faint transition-colors hover:border-amber/40 hover:text-amber"
+                        >
+                          {copiedCohortId === cohort.id ? 'copied' : cohort.invite_code}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => void handleLeaveCohort(cohort)}
+                          className="rounded border border-line px-2 py-1 font-mono text-[9px] text-ink-faint transition-colors hover:border-red-500/40 hover:text-red-400"
+                        >
+                          leave
+                        </button>
                       </div>
                     </div>
-                    <button
-                      type="button"
-                      onClick={() => void handleCopyCohort(cohort)}
-                      className="shrink-0 rounded border border-line px-2 py-1 font-mono text-[9px] uppercase tracking-[0.1em] text-ink-faint transition-colors hover:border-amber/40 hover:text-amber"
-                    >
-                      {copiedCohortId === cohort.id ? 'copied' : cohort.invite_code}
-                    </button>
+
+                    {isOpen && (
+                      <div className="border-t border-line px-3 pb-2 pt-2">
+                        {loading && (
+                          <div className="py-2 text-center font-mono text-[9px] text-ink-faint">loading...</div>
+                        )}
+                        {!loading && members && members.length === 0 && (
+                          <div className="py-2 text-center font-mono text-[9px] text-ink-faint">no members found</div>
+                        )}
+                        {!loading && members && members.map((member) => {
+                          const live = liveStates.get(member.id);
+                          const memberStatus = live?.status === 'docked' ? 'online'
+                            : live?.status === 'undocked' ? 'paused'
+                            : member.hardware_status === 'docked' ? 'online'
+                            : 'offline';
+                          const task = memberStatus === 'online' ? (live?.workflowGroup ?? member.current_activity ?? 'in session')
+                            : memberStatus === 'paused' ? 'paused'
+                            : 'offline';
+                          const elapsed = memberStatus !== 'offline'
+                            ? formatElapsed(live?.sessionStartedAt ?? (member.hardware_status === 'docked' ? member.last_ping : undefined))
+                            : null;
+                          return (
+                            <div
+                              key={member.id}
+                              className={cn('flex items-center gap-2.5 py-1.5', memberStatus === 'offline' && 'opacity-50')}
+                            >
+                              <ProfileAvatar profile={member} color={member.orb_color ?? '#3a3d4a'} pulse={memberStatus === 'online'} size={26} />
+                              <div className="min-w-0 flex-1">
+                                <div className="truncate font-serif text-sm italic">@{member.username}</div>
+                                <div className="font-mono text-[9px] text-ink-faint">{task}</div>
+                                {elapsed && (
+                                  <div className="font-mono text-[9px] text-amber">{elapsed}</div>
+                                )}
+                              </div>
+                              <div className="flex flex-col items-end gap-0.5">
+                                <span className={cn(
+                                  'font-mono text-[9px] uppercase tracking-[0.1em]',
+                                  memberStatus === 'online' ? 'text-amber' : memberStatus === 'paused' ? 'text-blue-400' : 'text-ink-faint',
+                                )}>
+                                  {memberStatus}
+                                </span>
+                                {member.streak > 0 && (
+                                  <span className="font-mono text-[9px] text-ink-faint">{member.streak}d</span>
+                                )}
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
                   </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           )}
         </div>
