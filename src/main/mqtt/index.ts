@@ -1,6 +1,7 @@
 import mqtt, { MqttClient } from 'mqtt';
 import { BrowserWindow } from 'electron';
 import { updateProfile, startSession, logActivity } from '../supabase';
+import { recordPhoneLift, startSessionMetrics } from '../session_metrics';
 
 type OrbPayload = {
   status?: 'docked' | 'undocked' | 'redocked' | 'offline';
@@ -16,6 +17,7 @@ type OrbPayload = {
 let client: MqttClient | null = null;
 let currentUserId: string | null = null;
 let activeSessionId: string | null = null;
+let mqttSessionStartedAt: string | null = null;
 let pauseStart: number | null = null;
 let totalPauseMs = 0;
 const simulatedFriendPauses = new Map<string, { pauseStart: number | null; totalPauseMs: number }>();
@@ -36,6 +38,10 @@ export function getActiveSessionId(): string | null {
 
 export function setActiveSessionId(id: string | null): void {
   activeSessionId = id;
+}
+
+export function getSessionStartedAt(): string | null {
+  return mqttSessionStartedAt;
 }
 
 export function initMqtt(userId: string): void {
@@ -129,10 +135,14 @@ async function handleOwnOrbState(payload: OrbPayload): Promise<void> {
     const duration = payload.plannedDurationMinutes ?? payload.duration ?? 60;
     const workflowGroup = payload.workflowGroup ?? 'Focus Session';
     const sessionStartedAt = payload.sessionStartedAt ?? new Date().toISOString();
+    mqttSessionStartedAt = sessionStartedAt;
 
     if (!activeSessionId && currentUserId) {
       const session = await startSession(currentUserId, workflowGroup, duration);
-      if (session) activeSessionId = session.id;
+      if (session) {
+        activeSessionId = session.id;
+        startSessionMetrics(session.id, session.started_at);
+      }
     }
 
     await updateProfile(currentUserId!, {
@@ -158,7 +168,9 @@ async function handleOwnOrbState(payload: OrbPayload): Promise<void> {
   }
 
   if (status === 'undocked') {
+    const wasPaused = pauseStart !== null;
     pauseStart = payload.pauseStart ?? Date.now();
+    if (!wasPaused) recordPhoneLift();
 
     if (activeSessionId && currentUserId) {
       await logActivity(activeSessionId, currentUserId, 'hardware_break', { sensor: 'undocked' });
@@ -192,6 +204,7 @@ async function handleOwnOrbState(payload: OrbPayload): Promise<void> {
     };
     broadcastToRenderer('mqtt:own-state', ownPayload);
     publishOwnState({ ...ownPayload, origin: 'desktop-sim' });
+    onDockedCallback?.();
     return;
   }
 
@@ -199,6 +212,7 @@ async function handleOwnOrbState(payload: OrbPayload): Promise<void> {
     pauseStart = null;
     totalPauseMs = 0;
     activeSessionId = null;
+    mqttSessionStartedAt = null;
     await updateProfile(currentUserId!, { hardware_status: 'offline' });
     const ownPayload = { status: 'offline' };
     broadcastToRenderer('mqtt:own-state', ownPayload);

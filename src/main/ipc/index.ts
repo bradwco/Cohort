@@ -1,4 +1,4 @@
-import { BrowserWindow, desktopCapturer, ipcMain, screen, shell } from 'electron';
+import { BrowserWindow, desktopCapturer, ipcMain, powerMonitor, screen, shell } from 'electron';
 import * as fs from 'fs';
 import * as nodePath from 'path';
 import * as os from 'os';
@@ -29,9 +29,16 @@ import {
   getPauseStats,
   setActiveSessionId,
   getActiveSessionId,
+  getSessionStartedAt,
   simulateHardwareEvent,
   resetPauseStats,
 } from '../mqtt';
+import {
+  calculateFlowScore,
+  finishSessionMetrics,
+  recordFocusState,
+  startSessionMetrics,
+} from '../session_metrics';
 
 export function registerIpcHandlers(): void {
   ipcMain.handle(CH.PING, () => 'pong');
@@ -68,14 +75,18 @@ export function registerIpcHandlers(): void {
     CH.SESSION_START,
     async (_e, userId: string, workflowGroup: string, durationMins: number) => {
       const session = await startSession(userId, workflowGroup, durationMins);
-      if (session) setActiveSessionId(session.id);
+      if (session) {
+        setActiveSessionId(session.id);
+        startSessionMetrics(session.id, session.started_at);
+      }
       return session;
     },
   );
   ipcMain.handle(CH.SESSION_END, async (_e, pauseMinutes: number, flowScore: number, aiSummary: string) => {
     const sessionId = getActiveSessionId();
     if (!sessionId) return;
-    await endSession(sessionId, pauseMinutes, flowScore, aiSummary);
+    const metrics = finishSessionMetrics(sessionId);
+    await endSession(sessionId, pauseMinutes, metrics ? calculateFlowScore(metrics) : flowScore, aiSummary, undefined, metrics ?? undefined);
     setActiveSessionId(null);
   });
   ipcMain.handle(CH.SESSION_HISTORY, (_e, userId: string) => getSessionHistory(userId));
@@ -133,13 +144,18 @@ export function registerIpcHandlers(): void {
     SUPABASE_ANON_KEY: (import.meta.env.SUPABASE_ANON_KEY as string) ?? '',
     USER_ID: getOverlayUserId(),
     SESSION_ID: getActiveSessionId() ?? '',
+    SESSION_STARTED_AT: getSessionStartedAt() ?? '',
+    TOTAL_PAUSE_MS: getPauseStats().totalPauseMs,
   }));
 
   ipcMain.handle('create-session', async (_e, { plannedDurationMinutes, workflowGroup }: { plannedDurationMinutes: number; workflowGroup: string }) => {
     const userId = getOverlayUserId();
     if (!userId) return null;
     const session = await startSession(userId, workflowGroup, plannedDurationMinutes);
-    if (session) setActiveSessionId(session.id);
+    if (session) {
+      setActiveSessionId(session.id);
+      startSessionMetrics(session.id, session.started_at);
+    }
     return session?.id ?? null;
   });
 
@@ -148,7 +164,15 @@ export function registerIpcHandlers(): void {
     async (_e, { sessionId, flowScore, conversationHistory }: { sessionId: string; flowScore: number | null; conversationHistory: unknown[] }) => {
       if (!sessionId) return;
       const userId = getOverlayUserId();
-      await endSession(sessionId, 0, flowScore ?? 0, '', conversationHistory);
+      const metrics = finishSessionMetrics(sessionId);
+      await endSession(
+        sessionId,
+        0,
+        metrics ? calculateFlowScore(metrics) : flowScore ?? 0,
+        '',
+        conversationHistory,
+        metrics ?? undefined,
+      );
       if (userId) await updateProfile(userId, { hardware_status: 'offline' });
       setActiveSessionId(null);
       resetPauseStats();
@@ -158,9 +182,18 @@ export function registerIpcHandlers(): void {
     },
   );
 
+  ipcMain.handle('get-system-idle-secs', () => powerMonitor.getSystemIdleTime());
+
+  ipcMain.handle('overlay-pause', async () => {
+    const userId = getOverlayUserId();
+    if (!userId) return;
+    await simulateHardwareEvent(userId, { status: 'undocked' });
+  });
+
   ipcMain.handle('update-focus-state', (_e, state: string) => {
     const userId = getOverlayUserId();
     if (!userId) return;
+    recordFocusState(state);
     return updateProfile(userId, {
       focus_state: state as 'productive' | 'distracted' | 'idle' | 'offline',
     });

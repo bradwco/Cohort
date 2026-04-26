@@ -22,7 +22,6 @@ type Props = {
   userId: string | null;
   activeGroup: string | null;
   groups: string[];
-  initialDuration?: number;
   onAddGroup: (name: string) => void;
   onSelectGroup: (name: string) => void;
   onSessionEnd: () => void;
@@ -32,7 +31,6 @@ export function HwSimulator({
   userId: currentUserId,
   activeGroup,
   groups,
-  initialDuration = 60,
   onAddGroup,
   onSelectGroup,
   onSessionEnd,
@@ -40,12 +38,10 @@ export function HwSimulator({
   const [open, setOpen] = useState(false);
   const [users, setUsers] = useState<SimUser[]>([]);
   const [userId, setUserId] = useState('');
-  const [duration, setDuration] = useState(initialDuration);
   const [status, setStatus] = useState<OrbStatus>('offline');
   const [log, setLog] = useState<string[]>([]);
   const [newGroupInput, setNewGroupInput] = useState('');
   const [sessionStartedAt, setSessionStartedAt] = useState<string | null>(null);
-  const [sessionDuration, setSessionDuration] = useState(initialDuration);
   const [sessionWorkflow, setSessionWorkflow] = useState<string>('Focus Session');
   const [sessionNote, setSessionNote] = useState('');
 
@@ -97,11 +93,10 @@ export function HwSimulator({
       setUserId(users[0]!.id);
       setStatus('offline');
       setSessionStartedAt(null);
-      setSessionDuration(initialDuration);
       setSessionWorkflow(activeGroup ?? 'Focus Session');
       setSessionNote('');
     }
-  }, [activeGroup, initialDuration, userId, users]);
+  }, [activeGroup, userId, users]);
 
   useEffect(() => {
     if (!window.api) return;
@@ -110,7 +105,8 @@ export function HwSimulator({
       if (data.status === 'offline') {
         setStatus('offline');
         setSessionStartedAt(null);
-        setSessionDuration(initialDuration);
+      } else if (data.status === 'undocked') {
+        setStatus('undocked');
       }
     });
     return () => { cleanup(); };
@@ -143,16 +139,15 @@ export function HwSimulator({
     const nextWorkflow = trimmedNote;
     const payload = {
       status: 'docked',
-      duration,
+      duration: 60,
       workflowGroup: nextWorkflow,
       sessionStartedAt: nextStartedAt,
-      plannedDurationMinutes: sessionDuration || duration,
+      plannedDurationMinutes: 60,
     };
 
     if (await fire(payload)) {
       setStatus('docked');
       setSessionStartedAt(nextStartedAt);
-      setSessionDuration(duration);
       setSessionWorkflow(nextWorkflow);
     }
   }
@@ -162,7 +157,7 @@ export function HwSimulator({
       await fire({
         status: 'undocked',
         sessionStartedAt: sessionStartedAt ?? new Date().toISOString(),
-        plannedDurationMinutes: sessionDuration,
+        plannedDurationMinutes: 60,
         workflowGroup: sessionWorkflow,
       })
     ) {
@@ -175,7 +170,7 @@ export function HwSimulator({
       await fire({
         status: 'redocked',
         sessionStartedAt: sessionStartedAt ?? new Date().toISOString(),
-        plannedDurationMinutes: sessionDuration,
+        plannedDurationMinutes: 60,
         workflowGroup: sessionWorkflow,
       })
     ) {
@@ -186,7 +181,6 @@ export function HwSimulator({
   async function endSession() {
     try {
       const wasOwnUser = Boolean(currentUserId && userId === currentUserId);
-      await fire({ status: 'offline' });
 
       if (wasOwnUser) {
         const stats = await window.api.getPauseStats();
@@ -195,10 +189,11 @@ export function HwSimulator({
         onSessionEnd();
       }
 
+      await fire({ status: 'offline' });
+
       push('OK session ended');
       setStatus('offline');
       setSessionStartedAt(null);
-      setSessionDuration(duration);
       setSessionWorkflow(activeGroup ?? 'Focus Session');
       setSessionNote('');
     } catch (err) {
@@ -260,7 +255,6 @@ export function HwSimulator({
                     setUserId(u.id);
                     setStatus('offline');
                     setSessionStartedAt(null);
-                    setSessionDuration(duration);
                     setSessionWorkflow(activeGroup ?? 'Focus Session');
                     setSessionNote('');
                   }}
@@ -337,29 +331,6 @@ export function HwSimulator({
             />
           </div>
 
-          <div className="mb-3">
-            <div className="mb-1 text-[9px] text-ink-faint">session duration (min)</div>
-            <div className="flex gap-1.5">
-              {[30, 45, 60, 90].map((d) => (
-                <button
-                  key={d}
-                  onClick={() => {
-                    setDuration(d);
-                    if (status === 'offline') setSessionDuration(d);
-                  }}
-                  className={cn(
-                    'rounded border px-2 py-1 text-[9px] transition-colors',
-                    duration === d
-                      ? 'border-amber/60 bg-amber/10 text-amber'
-                      : 'border-line-mid text-ink-dim hover:text-ink',
-                  )}
-                >
-                  {d}m
-                </button>
-              ))}
-            </div>
-          </div>
-
           <div className="mb-3 flex items-center gap-2">
             <span
               className={cn(
@@ -374,18 +345,11 @@ export function HwSimulator({
 
           <div className="mb-2 grid grid-cols-2 gap-1.5">
             <button
-              disabled={status === 'docked' || !userId || !sessionNote.trim()}
+              disabled={status !== 'offline' || !userId || !sessionNote.trim()}
               onClick={dock}
               className="rounded border border-amber/40 bg-amber/10 px-2 py-1.5 text-[10px] text-amber transition-opacity disabled:opacity-30"
             >
               Dock Phone
-            </button>
-            <button
-              disabled={status !== 'docked' || !userId}
-              onClick={undock}
-              className="rounded border border-cool-blue/40 bg-cool-blue/10 px-2 py-1.5 text-[10px] text-cool-blue transition-opacity disabled:opacity-30"
-            >
-              Lift Phone
             </button>
             <button
               disabled={status !== 'undocked' || !userId}

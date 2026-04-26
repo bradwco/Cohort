@@ -77,7 +77,7 @@ function DashboardApp({
   const sessionLengthRef = useRef(profile.sessionLength);
 
   const [orbStatus, setOrbStatus] = useState<OrbStatus>('offline');
-  const [secondsLeft, setSecondsLeft] = useState(profile.sessionLength * 60);
+  const [secondsElapsed, setSecondsElapsed] = useState(0);
   const [liftCount, setLiftCount] = useState(0);
   const [totalPauseMs, setTotalPauseMs] = useState(0);
   const [currentWorkflow, setCurrentWorkflow] = useState('');
@@ -99,7 +99,7 @@ function DashboardApp({
 
   useEffect(() => {
     if (orbStatus !== 'docked') return;
-    const id = setInterval(() => setSecondsLeft((s) => Math.max(0, s - 1)), 1000);
+    const id = setInterval(() => setSecondsElapsed((s) => s + 1), 1000);
     return () => clearInterval(id);
   }, [orbStatus]);
 
@@ -126,7 +126,7 @@ function DashboardApp({
 
       if (data.status === 'docked') {
         if (data.duration != null) {
-          setSecondsLeft(data.duration * 60);
+          setSecondsElapsed(0);
           setCurrentWorkflow(data.workflowGroup ?? '');
           setLiftCount(0);
           setTotalPauseMs(0);
@@ -147,7 +147,7 @@ function DashboardApp({
 
   function handleSessionEnd() {
     setOrbStatus('offline');
-    setSecondsLeft(sessionLengthRef.current * 60);
+    setSecondsElapsed(0);
     setLiftCount(0);
     setTotalPauseMs(0);
     setCurrentWorkflow('');
@@ -169,9 +169,6 @@ function DashboardApp({
     saveOnboarding(next);
     sessionLengthRef.current = next.sessionLength;
     setCurrentProfile(next);
-    if (patch.sessionLength != null && orbStatus === 'offline') {
-      setSecondsLeft(next.sessionLength * 60);
-    }
   }
 
   return (
@@ -187,7 +184,6 @@ function DashboardApp({
         userId={userId}
         activeGroup={activeGroup}
         groups={groups}
-        initialDuration={currentProfile.sessionLength}
         onAddGroup={handleAddGroup}
         onSelectGroup={setActiveGroup}
         onSessionEnd={handleSessionEnd}
@@ -214,7 +210,7 @@ function DashboardApp({
             <DashboardView
               userId={userId}
               profile={currentProfile}
-              secondsLeft={secondsLeft}
+              secondsElapsed={secondsElapsed}
               fmt={fmt}
               orbStatus={orbStatus}
               liftCount={liftCount}

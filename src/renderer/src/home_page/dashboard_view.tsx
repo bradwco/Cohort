@@ -75,7 +75,7 @@ function formatElapsed(startedAt?: string): string {
 type Props = {
   userId: string | null;
   profile: OnboardingData;
-  secondsLeft: number;
+  secondsElapsed: number;
   fmt: (s: number) => string;
   orbStatus: OrbStatus;
   liftCount: number;
@@ -86,7 +86,7 @@ type Props = {
 export function DashboardView({
   userId,
   profile,
-  secondsLeft,
+  secondsElapsed,
   fmt,
   orbStatus,
   liftCount,
@@ -177,11 +177,11 @@ export function DashboardView({
               sessionActive ? 'text-ink' : 'text-ink-faint',
             )}
           >
-            {sessionActive ? fmt(secondsLeft) : '--:--'}
+            {sessionActive ? fmt(secondsElapsed) : '--:--'}
           </div>
 
           <div className="mt-3 font-mono text-[11px] uppercase tracking-[0.14em] text-ink-faint">
-            {sessionActive ? 'remaining' : 'dock your phone to start a session'}
+            {sessionActive ? 'elapsed' : 'dock your phone to start a session'}
           </div>
 
           {sessionActive && (

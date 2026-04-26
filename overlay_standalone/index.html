@@ -61,7 +61,7 @@
       </div>
       <div class="avatars" id="avatars"></div>
       <div class="divider"></div>
-      <div class="timer" id="timer">25:00</div>
+      <div class="timer" id="timer">00:00</div>
       <button class="stop" id="stop" aria-label="Stop session" title="Stop">
         <svg width="10" height="10" viewBox="0 0 10 10" fill="currentColor" aria-hidden="true">
           <rect x="0" y="0" width="10" height="10" rx="1.5" />
@@ -73,15 +73,20 @@
     <script src="ai/gemini.js"></script>
     <script src="ai/classifier.js"></script>
     <script>
-      // ── Timer ──────────────────────────────────────────────────────────
-      let secs = 25 * 60;
+      // ── Timer (stopwatch) ──────────────────────────────────────────────
+      let timerBaseMs = Date.now();
+      let pauseAdjustMs = 0;
       const timerEl = document.getElementById('timer');
-      const tick = setInterval(() => {
-        secs = Math.max(0, secs - 1);
+
+      function getElapsedSecs() {
+        return Math.max(0, Math.floor((Date.now() - timerBaseMs - pauseAdjustMs) / 1000));
+      }
+
+      setInterval(() => {
+        const s = getElapsedSecs();
         timerEl.textContent =
-          String(Math.floor(secs / 60)).padStart(2, '0') + ':' +
-          String(secs % 60).padStart(2, '0');
-        if (secs === 0) clearInterval(tick);
+          String(Math.floor(s / 60)).padStart(2, '0') + ':' +
+          String(s % 60).padStart(2, '0');
       }, 1000);
 
       let sessionId = null;
@@ -90,12 +95,16 @@
       (async () => {
         try {
           const cfg = await window.electronAPI.getConfig();
+          if (cfg.SESSION_STARTED_AT) {
+            timerBaseMs = new Date(cfg.SESSION_STARTED_AT).getTime();
+            pauseAdjustMs = cfg.TOTAL_PAUSE_MS ?? 0;
+          }
           if (cfg.SESSION_ID) {
             sessionId = cfg.SESSION_ID;
             console.log('[session] using existing:', sessionId);
           } else {
             sessionId = await window.electronAPI.createSession({
-              plannedDurationMinutes: Math.round(secs / 60),
+              plannedDurationMinutes: 60,
               workflowGroup: 'Focus Session',
             });
             console.log('[session] created:', sessionId);
@@ -236,21 +245,13 @@
       setInterval(syncFriendAvatars, 30_000);
 
       document.getElementById('stop').addEventListener('click', async () => {
+        window.electronAPI.updateFocusState('offline').catch(() => {});
         try {
-          window.electronAPI.updateFocusState('offline').catch(() => {});
-          if (sessionId) {
-            const score = focusSmoother ? +(focusSmoother.state().productiveRatio * 10).toFixed(1) : null;
-            await window.electronAPI.endSession({
-              sessionId,
-              flowScore: score,
-              conversationHistory: gemini?.history ?? [],
-            });
-          }
+          await window.electronAPI.overlayPause();
         } catch (e) {
-          console.warn('[session] failed to end:', e.message);
-        } finally {
-          window.close();
+          console.warn('[overlay] pause failed:', e.message);
         }
+        window.close();
       });
 
       let lastActivityTime = Date.now();
@@ -416,6 +417,7 @@
       let lastClassifyTime    = 0;
       let classifyInFlight    = false;
       let currentFocusState   = 'productive';
+      let lastContentChangeTime = 0; // updated when screen content changes (video detection)
 
       function setFocusState(state) {
         if (state === currentFocusState) return;
@@ -443,10 +445,18 @@
           }
 
           const now = Date.now();
-          const isActive = (now - lastActivityTime) < IDLE_MS;
           const dbg = document.getElementById('focus-debug');
 
-          // When idle: poll every 1s for mouse movement to exit
+          // Three activity signals combined:
+          //   1. system idle time  — keyboard / mouse in ANY app (via powerMonitor IPC)
+          //   2. overlay mousemove — mouse hovering over overlay UI
+          //   3. content change    — screen pixels changing (video playback detection)
+          const sysSec = await window.electronAPI.getSystemIdleSecs();
+          const isActive = sysSec * 1000 < IDLE_MS
+            || (now - lastActivityTime) < IDLE_MS
+            || (now - lastContentChangeTime) < IDLE_MS;
+
+          // When idle: poll every 1s for any activity to exit
           if (currentFocusState === 'idle') {
             if (isActive) setFocusState('productive');
             return;
@@ -497,6 +507,21 @@
           console.warn('[focus] error:', e.message);
         }
       }
+
+      // ── Video-change poller ────────────────────────────────────────────
+      // Runs independently of checkFocus so that passively-watched video
+      // (no keyboard/mouse input) still updates lastContentChangeTime and
+      // prevents the idle state from triggering.
+      let videoGate = null;
+      setInterval(async () => {
+        try {
+          if (!videoGate) videoGate = new PerceptualHashGate({ threshold: HASH_DIFF_THRESHOLD });
+          const thumb = await window.electronAPI.takeThumbnail();
+          if (!thumb) return;
+          const { changed } = await videoGate.hasSignificantChange(thumb);
+          if (changed) lastContentChangeTime = Date.now();
+        } catch (_e) {}
+      }, 8_000);
 
       setInterval(checkFocus, 1_000);
     </script>

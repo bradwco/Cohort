@@ -73,7 +73,7 @@ ipcMain.handle('create-session', async (_event, { plannedDurationMinutes, workfl
   return rows[0]?.id ?? null;
 });
 
-ipcMain.handle('end-session', async (_event, { sessionId, flowScore, conversationHistory }) => {
+ipcMain.handle('end-session', async (_event, { sessionId, flowScore, conversationHistory, metrics }) => {
   const url = (env.SUPABASE_URL || '').replace(/\/$/, '');
   const key = env.SUPABASE_ANON_KEY || '';
   if (!url || !key || !sessionId) return;
@@ -90,6 +90,7 @@ ipcMain.handle('end-session', async (_event, { sessionId, flowScore, conversatio
       pause_minutes_used:   0,
       flow_score:           flowScore ?? null,
       conversation_history: conversationHistory ?? [],
+      ...(metrics ?? {}),
     }),
   });
   if (!resp.ok) console.warn(`[session] end-session ${resp.status}: ${await resp.text()}`);
