@@ -22,6 +22,12 @@ export async function initHardwareSerial(userId: string): Promise<void> {
   console.log(`[serial] using logged-in user ${userId}`);
 
   const transport = env('HARDWARE_TRANSPORT').toLowerCase();
+  if (transport === 'off' || transport === 'none' || transport === 'sim' || transport === 'simulator') {
+    mode = 'disconnected';
+    broadcastSerialStatus(false);
+    console.log('[serial] disabled by HARDWARE_TRANSPORT');
+    return;
+  }
   if (transport && transport !== 'serial' && transport !== 'usb') return;
   if (port?.isOpen) {
     void syncHardwareColor(userId);
@@ -30,10 +36,15 @@ export async function initHardwareSerial(userId: string): Promise<void> {
   if (mode === 'connecting') return;
 
   mode = 'connecting';
-  const path = await resolvePortPath();
+  const path = await resolvePortPath().catch((err) => {
+    console.log('[serial] port scan skipped:', err instanceof Error ? err.message : String(err));
+    return null;
+  });
   if (!path) {
-    console.warn('[serial] no ESP32 serial port found');
+    console.log('[serial] no hardware serial port found; simulator can still be used');
     mode = 'disconnected';
+    heartbeatSeen = false;
+    broadcastSerialStatus(false);
     return;
   }
 
@@ -66,10 +77,16 @@ export async function initHardwareSerial(userId: string): Promise<void> {
       resolve();
     });
   }).catch((err) => {
-    console.warn('[serial] open failed:', err instanceof Error ? err.message : String(err));
+    console.log('[serial] unavailable; simulator can still be used:', err instanceof Error ? err.message : String(err));
   });
 
-  if (!port?.isOpen) return;
+  if (!port?.isOpen) {
+    mode = 'disconnected';
+    port = null;
+    heartbeatSeen = false;
+    broadcastSerialStatus(false);
+    return;
+  }
 
   port.set({ dtr: false, rts: false }, (err) => {
     if (err) console.warn('[serial] control-line setup failed:', err.message);
@@ -131,10 +148,16 @@ export function sendFocusStateToHardwareSerial(state: string): void {
 
 async function resolvePortPath(): Promise<string | null> {
   const configured = env('HARDWARE_SERIAL_PORT');
-  if (configured) return configured;
-
   const ports = await SerialPort.list();
   console.log('[serial] detected ports:', ports.map((p) => `${p.path} ${p.friendlyName ?? p.manufacturer ?? ''}`.trim()).join(', ') || 'none');
+
+  if (configured) {
+    const configuredPort = ports.find((p) => p.path.toLowerCase() === configured.toLowerCase());
+    if (configuredPort) return configuredPort.path;
+    console.log(`[serial] configured port ${configured} is not present; simulator can still be used`);
+    return null;
+  }
+
   const usbPorts = ports.filter((p) => {
     const haystack = [
       p.path,
