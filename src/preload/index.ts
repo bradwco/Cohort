@@ -32,6 +32,7 @@ const api = {
     ipcRenderer.invoke(CH.SESSION_START, userId, workflowGroup, durationMins),
   endSession: (pauseMinutes: number, flowScore: number, aiSummary: string) =>
     ipcRenderer.invoke(CH.SESSION_END, pauseMinutes, flowScore, aiSummary),
+  resumeSession: () => ipcRenderer.invoke(CH.SESSION_RESUME),
   getSessionHistory: (userId: string) => ipcRenderer.invoke(CH.SESSION_HISTORY, userId),
   queryAgent: (request: {
     intent: 'dashboard_insight' | 'session_postmortem' | 'chat';

@@ -14,6 +14,7 @@ type DBSession = {
   pause_minutes_used?: number;     // real DB field
   pause_minutes?: number;          // mock data only
   ai_summary?: string | null;
+  conversation_history?: unknown[] | null;
 };
 
 type CalendarCell = {
@@ -63,6 +64,8 @@ function dbSessionToRow(s: DBSession, index: number): Session {
     lifts: s.pause_minutes_used ?? s.pause_minutes ?? Math.floor(Math.random() * 12),
     task: s.workflow_group ?? 'focus session',
     color: TASK_COLORS[index % TASK_COLORS.length] ?? '#E8A87C',
+    summary: s.ai_summary ?? undefined,
+    conversationHistory: s.conversation_history ?? undefined,
   };
 }
 

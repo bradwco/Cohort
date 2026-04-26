@@ -3,6 +3,7 @@ import { PixelOrbMini } from '../orb_character/pixel_orb_mini';
 import { PixelAvatar } from '../components/onboarding/pixel_avatar';
 import { cn } from '../shared_ui/cn';
 import type { AvatarTraits } from '../state/onboarding';
+import { supabase } from '../lib/supabase_auth';
 
 type ProfileRow = {
   id: string;
@@ -72,6 +73,33 @@ function formatElapsed(startedAt?: string): string {
   return `${minutes}m`;
 }
 
+async function leaveCohortDirect(userId: string, cohortId: string): Promise<boolean> {
+  if (!supabase) return false;
+
+  const { error } = await supabase
+    .from('cohort_members')
+    .delete()
+    .eq('cohort_id', cohortId)
+    .eq('user_id', userId);
+  if (error) {
+    console.error('[leaveCohort] authenticated delete error:', error.message);
+    return false;
+  }
+
+  const { data, error: verifyError } = await supabase
+    .from('cohort_members')
+    .select('cohort_id')
+    .eq('cohort_id', cohortId)
+    .eq('user_id', userId)
+    .limit(1);
+  if (verifyError) {
+    console.error('[leaveCohort] authenticated verify error:', verifyError.message);
+    return false;
+  }
+
+  return (data ?? []).length === 0;
+}
+
 type Props = {
   userId: string | null;
 };
@@ -88,6 +116,7 @@ export function FriendsView({ userId }: Props) {
   const [joinCode, setJoinCode] = useState('');
   const [cohortStatus, setCohortStatus] = useState<'idle' | 'saving' | 'error'>('idle');
   const [copiedCohortId, setCopiedCohortId] = useState<string | null>(null);
+  const [leavingCohortId, setLeavingCohortId] = useState<string | null>(null);
   const [selectedCohortId, setSelectedCohortId] = useState<string | null>(null);
   const [cohortMembersMap, setCohortMembersMap] = useState<Map<string, CohortMemberRow[]>>(new Map());
   const [loadingCohortId, setLoadingCohortId] = useState<string | null>(null);
@@ -263,19 +292,37 @@ export function FriendsView({ userId }: Props) {
   async function handleLeaveCohort(cohort: CohortRow) {
     if (!userId || !window.api) return;
 
-    // Optimistic: remove from UI immediately
-    setCohorts((prev) => prev.filter((c) => c.id !== cohort.id));
-    if (selectedCohortId === cohort.id) setSelectedCohortId(null);
-    setCohortMembersMap((prev) => {
-      const next = new Map(prev);
-      next.delete(cohort.id);
-      return next;
-    });
-
+    setLeavingCohortId(cohort.id);
+    setCohortStatus('saving');
     try {
-      await window.api.leaveCohort(userId, cohort.id);
+      let ok = await window.api.leaveCohort(userId, cohort.id);
+      if (!ok) {
+        ok = await leaveCohortDirect(userId, cohort.id);
+      }
+      if (!ok) {
+        setCohortStatus('error');
+        return;
+      }
+
+      if (selectedCohortId === cohort.id) setSelectedCohortId(null);
+      setCohortMembersMap((prev) => {
+        const next = new Map(prev);
+        next.delete(cohort.id);
+        return next;
+      });
+
+      const [rows, sharedProfiles] = await Promise.all([
+        window.api.getCohorts(userId),
+        window.api.getSharedCohortProfiles(userId),
+      ]);
+      setCohorts((rows as CohortRow[]) ?? []);
+      setSharedCohortProfiles((sharedProfiles as ProfileRow[]) ?? []);
+      setCohortStatus('idle');
     } catch (err) {
       console.error('[leaveCohort] server error:', err);
+      setCohortStatus('error');
+    } finally {
+      setLeavingCohortId(null);
     }
   }
 
@@ -603,9 +650,10 @@ export function FriendsView({ userId }: Props) {
                         <button
                           type="button"
                           onClick={() => void handleLeaveCohort(cohort)}
+                          disabled={leavingCohortId === cohort.id}
                           className="rounded border border-line px-2 py-1 font-mono text-[9px] text-ink-faint transition-colors hover:border-red-500/40 hover:text-red-400"
                         >
-                          leave
+                          {leavingCohortId === cohort.id ? 'leaving' : 'leave'}
                         </button>
                       </div>
                     </div>

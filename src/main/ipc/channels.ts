@@ -26,6 +26,7 @@ export const CH = {
   // Supabase - sessions
   SESSION_START: 'supabase:session-start',
   SESSION_END: 'supabase:session-end',
+  SESSION_RESUME: 'supabase:session-resume',
   SESSION_HISTORY: 'supabase:session-history',
 
   // Agent

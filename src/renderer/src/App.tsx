@@ -45,19 +45,19 @@ function getInitialAppState(): {
   checkingAuth: boolean;
 } {
   const savedProfile = loadOnboarding();
+  const savedSession = getSavedAuthSession();
+
+  if (savedSession) {
+    const profile = mergeSessionIntoOnboarding(savedProfile, savedSession);
+    saveOnboarding(profile);
+    return { profile, authenticated: true, checkingAuth: false };
+  }
 
   if (hasAuthRedirectParams()) {
     return { profile: savedProfile, authenticated: false, checkingAuth: true };
   }
 
-  const onboardingProfile: OnboardingData = {
-    ...savedProfile,
-    step: 'welcome',
-    authenticated: false,
-    authProvider: null,
-  };
-  saveOnboarding(onboardingProfile);
-  return { profile: onboardingProfile, authenticated: false, checkingAuth: false };
+  return { profile: savedProfile, authenticated: false, checkingAuth: true };
 }
 
 function DashboardApp({
@@ -165,6 +165,18 @@ function DashboardApp({
     handleSessionEnd();
   }
 
+  async function handleResumeSession() {
+    setSessionPausedAt(null);
+    setOrbStatus('docked');
+    try {
+      await window.api?.resumeSession();
+    } catch (err) {
+      console.error('[session] resume failed:', err);
+      setOrbStatus('undocked');
+      setSessionPausedAt(new Date().toISOString());
+    }
+  }
+
   // Listen for overlay pause events
   useEffect(() => {
     if (!window.api?.onSessionPaused) return;
@@ -250,6 +262,7 @@ function DashboardApp({
               currentWorkflow={currentWorkflow}
               sessionPausedAt={sessionPausedAt}
               pauseBudgetMinutes={pauseBudgetMinutes}
+              onResumeSession={handleResumeSession}
               onEndSession={handleEndSession}
             />
           )}
@@ -330,7 +343,19 @@ export default function App() {
     let cancelled = false;
     completeAuthRedirect()
       .then(async (session) => {
-        if (cancelled || !session) return;
+        if (cancelled) return;
+        if (!session) {
+          const nextProfile: OnboardingData = {
+            ...loadOnboarding(),
+            step: 'welcome',
+            authenticated: false,
+            authProvider: null,
+          };
+          saveOnboarding(nextProfile);
+          setProfile(nextProfile);
+          setAuthenticated(false);
+          return;
+        }
         const nextProfile = mergeSessionIntoOnboarding(loadOnboarding(), session);
         await persistSignedInUserProfile(nextProfile, session);
         saveOnboarding(nextProfile);

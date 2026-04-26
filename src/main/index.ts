@@ -68,7 +68,13 @@ if (!gotTheLock) {
   let overlayWin: BrowserWindow | null = null;
 
   function showOverlay(): void {
-    if (overlayWin && !overlayWin.isDestroyed()) return;
+    if (overlayWin && !overlayWin.isDestroyed()) {
+      mainWin?.hide();
+      overlayWin.show();
+      overlayWin.focus();
+      return;
+    }
+    mainWin?.hide();
     overlayWin = createOverlayWindow();
     overlayWin.on("closed", () => {
       overlayWin = null;
@@ -81,28 +87,31 @@ if (!gotTheLock) {
     if (overlayWin && !overlayWin.isDestroyed()) overlayWin.close();
   }
 
-  app.whenReady().then(() => {
-    registerIpcHandlers();
-    startAgentServer();
-    mainWin = createMainWindow();
-
-    setDockedCallback(() => {
-      mainWin?.hide();
-      showOverlay();
-    });
-
-    setOfflineCallback(() => {
-      closeOverlay();
-    });
-
-    app.on("activate", () => {
-      if (!mainWin || mainWin.isDestroyed()) mainWin = createMainWindow();
-      else {
-        mainWin.show();
-        mainWin.focus();
-      }
-    });
+app.whenReady().then(() => {
+  registerIpcHandlers({
+    onResumeSession: showOverlay,
   });
+
+  startAgentServer();
+
+  mainWin = createMainWindow();
+
+  setDockedCallback(() => {
+    showOverlay();
+  });
+
+  setOfflineCallback(() => {
+    closeOverlay();
+  });
+
+  app.on("activate", () => {
+    if (!mainWin || mainWin.isDestroyed()) mainWin = createMainWindow();
+    else {
+      mainWin.show();
+      mainWin.focus();
+    }
+  });
+});
 
   app.on("window-all-closed", () => {
     destroyMqtt();

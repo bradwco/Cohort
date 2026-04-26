@@ -111,7 +111,7 @@
       <div class="avatars" id="avatars"></div>
       <div class="divider"></div>
       <div class="timer" id="timer">25:00</div>
-      <button class="stop" id="stop" aria-label="Stop session" title="Stop">
+      <button class="stop" id="stop" aria-label="Pause session" title="Pause">
         <svg
           width="10"
           height="10"
@@ -156,6 +156,14 @@
           const cfg = await window.electronAPI.getConfig();
           if (cfg.PLANNED_DURATION_MINUTES) {
             goalSecs = cfg.PLANNED_DURATION_MINUTES * 60;
+          }
+          if (cfg.SESSION_STARTED_AT) {
+            const elapsedMs = Date.now() - Date.parse(cfg.SESSION_STARTED_AT) - (cfg.TOTAL_PAUSE_MS || 0);
+            secsElapsed = Math.max(0, Math.floor(elapsedMs / 1000));
+            timerEl.textContent =
+              String(Math.floor(secsElapsed / 60)).padStart(2, "0") +
+              ":" +
+              String(secsElapsed % 60).padStart(2, "0");
           }
           if (cfg.SESSION_ID) {
             sessionId = cfg.SESSION_ID;
@@ -355,17 +363,8 @@
 
       document.getElementById("stop").addEventListener("click", async () => {
         try {
-          window.electronAPI.updateFocusState("offline").catch(() => {});
-          if (sessionId) {
-            const score = focusSmoother
-              ? +(focusSmoother.state().productiveRatio * 10).toFixed(1)
-              : null;
-            await window.electronAPI.endSession({
-              sessionId,
-              flowScore: score,
-              conversationHistory: gemini?.history ?? [],
-            });
-          }
+          window.electronAPI.updateFocusState("idle").catch(() => {});
+          await window.electronAPI.pauseSession();
         } catch (e) {
           console.warn("[session] pause failed:", e.message);
         } finally {
