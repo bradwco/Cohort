@@ -34,6 +34,12 @@ const api = {
     ipcRenderer.invoke(CH.SESSION_END, pauseMinutes, flowScore, aiSummary),
   resumeSession: () => ipcRenderer.invoke(CH.SESSION_RESUME),
   getSessionHistory: (userId: string) => ipcRenderer.invoke(CH.SESSION_HISTORY, userId),
+  queryAgent: (request: {
+    intent: 'dashboard_insight' | 'session_postmortem' | 'chat';
+    userId?: string | null;
+    context?: Record<string, unknown>;
+    message?: string;
+  }) => ipcRenderer.invoke(CH.AGENT_QUERY, request),
 
   // Activity logs
   logActivity: (sessionId: string, userId: string, eventType: string, eventDetail: Record<string, unknown>) =>

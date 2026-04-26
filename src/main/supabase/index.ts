@@ -500,6 +500,19 @@ export async function getSessionHistory(userId: string): Promise<Session[]> {
   return (data ?? []) as Session[];
 }
 
+export async function getSessionById(sessionId: string): Promise<Session | null> {
+  const { data, error } = await getSupabaseClient()
+    .from('sessions')
+    .select('*')
+    .eq('id', sessionId)
+    .single();
+  if (error) {
+    console.error('getSessionById:', error.message);
+    return null;
+  }
+  return data as Session;
+}
+
 export async function logActivity(
   sessionId: string,
   userId: string,
