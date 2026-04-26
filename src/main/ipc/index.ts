@@ -30,6 +30,7 @@ import {
   setActiveSessionId,
   getActiveSessionId,
   simulateHardwareEvent,
+  resetPauseStats,
 } from '../mqtt';
 
 export function registerIpcHandlers(): void {
@@ -150,8 +151,20 @@ export function registerIpcHandlers(): void {
       await endSession(sessionId, 0, flowScore ?? 0, '', conversationHistory);
       if (userId) await updateProfile(userId, { hardware_status: 'offline' });
       setActiveSessionId(null);
+      resetPauseStats();
+      for (const win of BrowserWindow.getAllWindows()) {
+        win.webContents.send('mqtt:own-state', { status: 'offline' });
+      }
     },
   );
+
+  ipcMain.handle('update-focus-state', (_e, state: string) => {
+    const userId = getOverlayUserId();
+    if (!userId) return;
+    return updateProfile(userId, {
+      focus_state: state as 'productive' | 'distracted' | 'idle' | 'offline',
+    });
+  });
 
   ipcMain.handle('take-screenshot', async () => {
     const { width, height } = screen.getPrimaryDisplay().workAreaSize;
@@ -174,8 +187,8 @@ export function registerIpcHandlers(): void {
       'admin = calendar, email, settings, planning, short operational work',
       'distracted = entertainment, shopping, social feeds, games, memes, unrelated browsing',
     ].join('\n');
-    const ep = endpoint ?? process.env['LOCAL_VLM_URL'] ?? 'http://127.0.0.1:11434/api/chat';
-    const m = model ?? process.env['LOCAL_VLM_MODEL'] ?? 'moondream';
+    const ep = endpoint ?? (import.meta.env.LOCAL_VLM_URL as string) ?? 'http://127.0.0.1:11434/api/chat';
+    const m  = model    ?? (import.meta.env.LOCAL_VLM_MODEL as string) ?? 'moondream';
     const resp = await fetch(ep, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
