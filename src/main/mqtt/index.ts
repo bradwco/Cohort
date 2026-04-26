@@ -17,7 +17,9 @@ type OrbPayload = {
 let client: MqttClient | null = null;
 let currentUserId: string | null = null;
 let activeSessionId: string | null = null;
-let mqttSessionStartedAt: string | null = null;
+let activeSessionStartedAt: string | null = null;
+let activeWorkflowGroup: string | null = null;
+let activePlannedDurationMinutes: number | null = null;
 let pauseStart: number | null = null;
 let totalPauseMs = 0;
 const simulatedFriendPauses = new Map<string, { pauseStart: number | null; totalPauseMs: number }>();
@@ -38,10 +40,41 @@ export function getActiveSessionId(): string | null {
 
 export function setActiveSessionId(id: string | null): void {
   activeSessionId = id;
+  if (id === null) {
+    activeSessionStartedAt = null;
+    activeWorkflowGroup = null;
+    activePlannedDurationMinutes = null;
+  }
+}
+
+export function setActiveSessionDetails(details: {
+  sessionStartedAt?: string | null;
+  workflowGroup?: string | null;
+  plannedDurationMinutes?: number | null;
+}): void {
+  if (details.sessionStartedAt !== undefined) activeSessionStartedAt = details.sessionStartedAt;
+  if (details.workflowGroup !== undefined) activeWorkflowGroup = details.workflowGroup;
+  if (details.plannedDurationMinutes !== undefined) activePlannedDurationMinutes = details.plannedDurationMinutes;
+}
+
+export function getActiveSessionSnapshot(): {
+  sessionId: string | null;
+  sessionStartedAt: string | null;
+  workflowGroup: string | null;
+  plannedDurationMinutes: number | null;
+  totalPauseMs: number;
+} {
+  return {
+    sessionId: activeSessionId,
+    sessionStartedAt: activeSessionStartedAt,
+    workflowGroup: activeWorkflowGroup,
+    plannedDurationMinutes: activePlannedDurationMinutes,
+    totalPauseMs,
+  };
 }
 
 export function getSessionStartedAt(): string | null {
-  return mqttSessionStartedAt;
+  return activeSessionStartedAt;
 }
 
 export function initMqtt(userId: string): void {
@@ -135,7 +168,9 @@ async function handleOwnOrbState(payload: OrbPayload): Promise<void> {
     const duration = payload.plannedDurationMinutes ?? payload.duration ?? 60;
     const workflowGroup = payload.workflowGroup ?? 'Focus Session';
     const sessionStartedAt = payload.sessionStartedAt ?? new Date().toISOString();
-    mqttSessionStartedAt = sessionStartedAt;
+    activeSessionStartedAt = activeSessionStartedAt ?? sessionStartedAt;
+    activeWorkflowGroup = workflowGroup;
+    activePlannedDurationMinutes = duration;
 
     if (!activeSessionId && currentUserId) {
       const session = await startSession(currentUserId, workflowGroup, duration);
@@ -212,7 +247,9 @@ async function handleOwnOrbState(payload: OrbPayload): Promise<void> {
     pauseStart = null;
     totalPauseMs = 0;
     activeSessionId = null;
-    mqttSessionStartedAt = null;
+    activeSessionStartedAt = null;
+    activeWorkflowGroup = null;
+    activePlannedDurationMinutes = null;
     await updateProfile(currentUserId!, { hardware_status: 'offline' });
     const ownPayload = { status: 'offline' };
     broadcastToRenderer('mqtt:own-state', ownPayload);
@@ -299,7 +336,57 @@ export function getPauseStats(): { pauseStart: number | null; totalPauseMs: numb
   return { pauseStart, totalPauseMs };
 }
 
+export async function markPaused(pausedAt: string): Promise<void> {
+  pauseStart = Date.parse(pausedAt);
+  if (!Number.isFinite(pauseStart)) pauseStart = Date.now();
+
+  if (currentUserId) {
+    await updateProfile(currentUserId, { hardware_status: 'offline' });
+    if (activeSessionId) {
+      await logActivity(activeSessionId, currentUserId, 'hardware_break', { source: 'overlay_pause' });
+    }
+  }
+
+  const ownPayload = {
+    status: 'undocked',
+    pauseStart,
+    totalPauseMs,
+  };
+  broadcastToRenderer('mqtt:own-state', ownPayload);
+  publishOwnState({ ...ownPayload, origin: 'desktop-sim' });
+}
+
+export async function resumePause(options: { openOverlay?: boolean } = {}): Promise<{ totalPauseMs: number }> {
+  if (pauseStart !== null) {
+    totalPauseMs += Date.now() - pauseStart;
+    pauseStart = null;
+  }
+
+  if (currentUserId) {
+    await updateProfile(currentUserId, { hardware_status: 'docked' });
+  }
+
+  const ownPayload = {
+    status: 'docked',
+    sessionId: activeSessionId,
+    totalPauseMs,
+    sessionStartedAt: activeSessionStartedAt ?? undefined,
+    plannedDurationMinutes: activePlannedDurationMinutes ?? undefined,
+    workflowGroup: activeWorkflowGroup ?? undefined,
+  };
+  broadcastToRenderer('mqtt:own-state', ownPayload);
+  publishOwnState({ ...ownPayload, origin: 'desktop-sim' });
+  if (options.openOverlay ?? true) {
+    onDockedCallback?.();
+  }
+
+  return { totalPauseMs };
+}
+
 export function resetPauseStats(): void {
   pauseStart = null;
   totalPauseMs = 0;
+  activeSessionStartedAt = null;
+  activeWorkflowGroup = null;
+  activePlannedDurationMinutes = null;
 }

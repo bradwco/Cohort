@@ -45,19 +45,19 @@ function getInitialAppState(): {
   checkingAuth: boolean;
 } {
   const savedProfile = loadOnboarding();
+  const savedSession = getSavedAuthSession();
+
+  if (savedSession) {
+    const profile = mergeSessionIntoOnboarding(savedProfile, savedSession);
+    saveOnboarding(profile);
+    return { profile, authenticated: true, checkingAuth: false };
+  }
 
   if (hasAuthRedirectParams()) {
     return { profile: savedProfile, authenticated: false, checkingAuth: true };
   }
 
-  const onboardingProfile: OnboardingData = {
-    ...savedProfile,
-    step: 'welcome',
-    authenticated: false,
-    authProvider: null,
-  };
-  saveOnboarding(onboardingProfile);
-  return { profile: onboardingProfile, authenticated: false, checkingAuth: false };
+  return { profile: savedProfile, authenticated: false, checkingAuth: true };
 }
 
 function DashboardApp({
@@ -82,8 +82,13 @@ function DashboardApp({
   const [totalPauseMs, setTotalPauseMs] = useState(0);
   const [currentWorkflow, setCurrentWorkflow] = useState('');
 
-  const [groups, setGroups] = useState<string[]>([]);
   const [activeGroup, setActiveGroup] = useState<string | null>(null);
+  const [sessionPausedAt, setSessionPausedAt] = useState<string | null>(null);
+
+  const pauseBudgetMinutes =
+    currentProfile.accountability === 'gentle' ? 10
+    : currentProfile.accountability === 'standard' ? 3
+    : 0;
 
   const [brightness, setBrightness] = useState(72);
   const [breathSpeed, setBreathSpeed] = useState(45);
@@ -98,10 +103,10 @@ function DashboardApp({
   }, [userId]);
 
   useEffect(() => {
-    if (orbStatus !== 'docked') return;
+    if (orbStatus !== 'docked' || sessionPausedAt !== null) return;
     const id = setInterval(() => setSecondsElapsed((s) => s + 1), 1000);
     return () => clearInterval(id);
-  }, [orbStatus]);
+  }, [orbStatus, sessionPausedAt]);
 
   useEffect(() => {
     if (feedRef.current) feedRef.current.scrollTop = feedRef.current.scrollHeight;
@@ -125,6 +130,7 @@ function DashboardApp({
       pushTelemetry('focus-orb/own/state', data);
 
       if (data.status === 'docked') {
+        setSessionPausedAt(null);
         if (data.duration != null) {
           setSecondsElapsed(0);
           setCurrentWorkflow(data.workflowGroup ?? '');
@@ -151,12 +157,51 @@ function DashboardApp({
     setLiftCount(0);
     setTotalPauseMs(0);
     setCurrentWorkflow('');
+    setSessionPausedAt(null);
   }
 
-  function handleAddGroup(name: string) {
-    setGroups((g) => (g.includes(name) ? g : [...g, name]));
-    setActiveGroup(name);
+  function handleEndSession() {
+    void window.api?.endSession(Math.round(totalPauseMs / 60000), 0, 'Ended from desktop');
+    handleSessionEnd();
   }
+
+  async function handleResumeSession() {
+    setSessionPausedAt(null);
+    setOrbStatus('docked');
+    try {
+      await window.api?.resumeSession();
+    } catch (err) {
+      console.error('[session] resume failed:', err);
+      setOrbStatus('undocked');
+      setSessionPausedAt(new Date().toISOString());
+    }
+  }
+
+  // Listen for overlay pause events
+  useEffect(() => {
+    if (!window.api?.onSessionPaused) return;
+    const cleanup = window.api.onSessionPaused((raw) => {
+      const { pausedAt } = raw as { pausedAt: string };
+      setSessionPausedAt(pausedAt);
+    });
+    return () => { cleanup(); };
+  }, []);
+
+  // Auto-end session when pause budget is exhausted
+  useEffect(() => {
+    if (!sessionPausedAt || orbStatus === 'offline') return;
+    if (pauseBudgetMinutes === 0) {
+      handleEndSession();
+      return;
+    }
+    const budgetMs = pauseBudgetMinutes * 60 * 1000;
+    const id = setInterval(() => {
+      if (Date.now() - Date.parse(sessionPausedAt) >= budgetMs) {
+        handleEndSession();
+      }
+    }, 1000);
+    return () => clearInterval(id);
+  }, [sessionPausedAt, orbStatus, pauseBudgetMinutes]); // eslint-disable-line react-hooks/exhaustive-deps
 
   function handleProfileUpdate(patch: Partial<OnboardingData>) {
     const next = {
@@ -183,8 +228,7 @@ function DashboardApp({
       <HwSimulator
         userId={userId}
         activeGroup={activeGroup}
-        groups={groups}
-        onAddGroup={handleAddGroup}
+        initialDuration={currentProfile.sessionLength}
         onSelectGroup={setActiveGroup}
         onSessionEnd={handleSessionEnd}
       />
@@ -216,6 +260,10 @@ function DashboardApp({
               liftCount={liftCount}
               totalPauseMs={totalPauseMs}
               currentWorkflow={currentWorkflow}
+              sessionPausedAt={sessionPausedAt}
+              pauseBudgetMinutes={pauseBudgetMinutes}
+              onResumeSession={handleResumeSession}
+              onEndSession={handleEndSession}
             />
           )}
           {activeView === 'history' && <HistoryView userId={userId} />}
@@ -295,7 +343,19 @@ export default function App() {
     let cancelled = false;
     completeAuthRedirect()
       .then(async (session) => {
-        if (cancelled || !session) return;
+        if (cancelled) return;
+        if (!session) {
+          const nextProfile: OnboardingData = {
+            ...loadOnboarding(),
+            step: 'welcome',
+            authenticated: false,
+            authProvider: null,
+          };
+          saveOnboarding(nextProfile);
+          setProfile(nextProfile);
+          setAuthenticated(false);
+          return;
+        }
         const nextProfile = mergeSessionIntoOnboarding(loadOnboarding(), session);
         await persistSignedInUserProfile(nextProfile, session);
         saveOnboarding(nextProfile);

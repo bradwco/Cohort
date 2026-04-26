@@ -24,13 +24,22 @@ const api = {
   createCohort: (userId: string, name: string) => ipcRenderer.invoke(CH.COHORT_CREATE, userId, name),
   joinCohort: (userId: string, inviteCode: string) => ipcRenderer.invoke(CH.COHORT_JOIN, userId, inviteCode),
   getSharedCohortProfiles: (userId: string) => ipcRenderer.invoke(CH.COHORT_SHARED_PROFILES, userId),
+  getCohortMembers: (cohortId: string) => ipcRenderer.invoke(CH.COHORT_MEMBERS, cohortId),
+  leaveCohort: (userId: string, cohortId: string) => ipcRenderer.invoke(CH.COHORT_LEAVE, userId, cohortId),
 
   // Sessions
   startSession: (userId: string, workflowGroup: string, durationMins: number) =>
     ipcRenderer.invoke(CH.SESSION_START, userId, workflowGroup, durationMins),
   endSession: (pauseMinutes: number, flowScore: number, aiSummary: string) =>
     ipcRenderer.invoke(CH.SESSION_END, pauseMinutes, flowScore, aiSummary),
+  resumeSession: () => ipcRenderer.invoke(CH.SESSION_RESUME),
   getSessionHistory: (userId: string) => ipcRenderer.invoke(CH.SESSION_HISTORY, userId),
+  queryAgent: (request: {
+    intent: 'dashboard_insight' | 'session_postmortem' | 'chat';
+    userId?: string | null;
+    context?: Record<string, unknown>;
+    message?: string;
+  }) => ipcRenderer.invoke(CH.AGENT_QUERY, request),
 
   // Activity logs
   logActivity: (sessionId: string, userId: string, eventType: string, eventDetail: Record<string, unknown>) =>
@@ -80,6 +89,12 @@ const api = {
   // Hardware simulator
   simulateHardware: (userId: string, payload: Record<string, unknown>) =>
     ipcRenderer.invoke(CH.HW_SIMULATE, userId, payload),
+
+  onSessionPaused: (cb: (data: unknown) => void) => {
+    const h = (_e: Electron.IpcRendererEvent, data: unknown) => cb(data);
+    ipcRenderer.on(PUSH.SESSION_PAUSED, h);
+    return () => ipcRenderer.off(PUSH.SESSION_PAUSED, h);
+  },
 
   // Deep link
   onDeepLink: (cb: (url: string) => void) => {

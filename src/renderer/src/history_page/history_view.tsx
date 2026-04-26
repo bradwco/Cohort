@@ -6,12 +6,14 @@ import { cn } from '../shared_ui/cn';
 type DBSession = {
   id: string;
   started_at: string;
-  ended_at?: string;
-  duration_mins?: number;
+  ended_at?: string | null;
+  planned_duration_minutes?: number;
+  duration_mins?: number;          // mock data only
   workflow_group?: string;
-  flow_score?: number;
+  flow_score?: number | null;
   pause_minutes_used?: number;
-  ai_summary?: string;
+  pause_minutes?: number;
+  ai_summary?: string | null;
   productive_duration_seconds?: number;
   distracted_duration_seconds?: number;
   distracted_occurrences?: number;
@@ -19,7 +21,7 @@ type DBSession = {
   idle_occurrences?: number;
   phone_lift_count?: number;
   total_work_duration_seconds?: number;
-  conversation_history?: unknown;
+  conversation_history?: unknown[] | null;
 };
 
 type ChatMessage = Session['chatLog'][number];
@@ -41,15 +43,33 @@ function localDateKey(date: Date): string {
   return `${y}-${m}-${d}`;
 }
 
+function fmtDuration(mins: number): string {
+  if (mins < 1) return '<1m';
+  const h = Math.floor(mins / 60);
+  const m = mins % 60;
+  if (h === 0) return `${m}m`;
+  if (m === 0) return `${h}h`;
+  return `${h}h ${m}m`;
+}
+
 function dbSessionToRow(s: DBSession, index: number): Session {
   const date = new Date(s.started_at);
   const label = `${date.toLocaleDateString('en-US', { weekday: 'long' })} / ${date.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true }).toLowerCase()}`;
-  const totalSeconds = s.total_work_duration_seconds ?? durationFromDates(s.started_at, s.ended_at);
-  const dur = totalSeconds != null
-    ? formatDuration(totalSeconds)
-    : s.duration_mins
-      ? formatDuration(s.duration_mins * 60)
-      : '--';
+
+  const totalSeconds = s.total_work_duration_seconds ?? durationFromDates(s.started_at, s.ended_at ?? undefined);
+  let dur: string;
+  if (totalSeconds != null) {
+    dur = formatDuration(totalSeconds);
+  } else if (s.ended_at) {
+    const elapsedMins = Math.round((Date.parse(s.ended_at) - Date.parse(s.started_at)) / 60000);
+    dur = fmtDuration(elapsedMins);
+  } else if (s.duration_mins != null) {
+    dur = fmtDuration(s.duration_mins);
+  } else if (s.planned_duration_minutes != null) {
+    dur = `~${fmtDuration(s.planned_duration_minutes)}`;
+  } else {
+    dur = '--';
+  }
   return {
     date: label,
     dur,
@@ -65,6 +85,7 @@ function dbSessionToRow(s: DBSession, index: number): Session {
     total: totalSeconds != null ? formatDuration(totalSeconds) : dur,
     summary: s.ai_summary ?? null,
     chatLog: normalizeConversationHistory(s.conversation_history),
+    conversationHistory: s.conversation_history ?? undefined,
   };
 }
 

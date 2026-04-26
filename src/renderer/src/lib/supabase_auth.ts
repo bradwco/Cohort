@@ -67,6 +67,9 @@ export async function signOut() {
   if (supabase) {
     await supabase.auth.signOut();
   }
+  if ((window as any).api?.saveUserSession) {
+    (window as any).api.saveUserSession('', '').catch(() => {});
+  }
   window.localStorage.removeItem(AUTH_SESSION_KEY);
   window.localStorage.removeItem(PENDING_PROVIDER_KEY);
   window.localStorage.removeItem(PENDING_PROFILE_KEY);

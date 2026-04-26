@@ -33,13 +33,6 @@ type DBSession = {
   flow_score?: number;
 };
 
-const GEMMA_INSIGHTS = [
-  'Your best sessions start before 10 PM. You average 94 flow on night sessions vs 78 in the afternoon.',
-  'You lift your phone most in the first 20 minutes. Try a hard start ritual to lock in faster.',
-  'Sessions over 60 minutes have 30% better flow scores than shorter ones. You go deep.',
-  "You haven't had a failed session in 5 days. The streak is working.",
-];
-
 function computeStreak(sessions: DBSession[]): number {
   if (sessions.length === 0) return 0;
   const dates = new Set(sessions.map((s) => new Date(s.started_at).toLocaleDateString()));
@@ -81,6 +74,15 @@ type Props = {
   liftCount: number;
   totalPauseMs: number;
   currentWorkflow: string;
+  sessionPausedAt: string | null;
+  pauseBudgetMinutes: number;
+  onResumeSession: () => void;
+  onEndSession: () => void;
+};
+
+type AgentResponse = {
+  text?: string;
+  error?: string;
 };
 
 export function DashboardView({
@@ -92,8 +94,15 @@ export function DashboardView({
   liftCount,
   totalPauseMs,
   currentWorkflow,
+  sessionPausedAt,
+  pauseBudgetMinutes,
+  onResumeSession,
+  onEndSession,
 }: Props) {
   const sessionActive = orbStatus !== 'offline';
+  const isPaused = sessionActive && sessionPausedAt !== null;
+  const goalSecs = profile.sessionLength * 60;
+  const goalReached = sessionActive && secondsElapsed >= goalSecs;
   const flowScore = sessionActive
     ? computeFlowScore(liftCount, totalPauseMs, profile.sessionLength)
     : null;
@@ -102,11 +111,14 @@ export function DashboardView({
   const [friends, setFriends] = useState<ProfileRow[]>([]);
   const [liveStates, setLiveStates] = useState<Map<string, LiveState>>(new Map());
   const [, setNowTick] = useState(Date.now());
+  const [agentInsight, setAgentInsight] = useState('Complete your first session to receive a personalized insight.');
+  const [insightLoading, setInsightLoading] = useState(false);
 
   const streak = computeStreak(sessions);
-  const insight = GEMMA_INSIGHTS[sessions.length % GEMMA_INSIGHTS.length] ?? GEMMA_INSIGHTS[0];
-  const orbColor =
-    orbStatus === 'docked' ? '#E8A87C' : orbStatus === 'undocked' ? '#7CB0E8' : '#3a3d4a';
+  const orbColor = isPaused ? '#7CB0E8'
+    : orbStatus === 'docked' ? '#E8A87C'
+    : orbStatus === 'undocked' ? '#7CB0E8'
+    : '#3a3d4a';
 
   useEffect(() => {
     if (!userId || !window.api) return;
@@ -124,7 +136,7 @@ export function DashboardView({
   }, [userId]);
 
   useEffect(() => {
-    const id = window.setInterval(() => setNowTick(Date.now()), 30000);
+    const id = window.setInterval(() => setNowTick(Date.now()), 1000);
     return () => window.clearInterval(id);
   }, []);
 
@@ -152,6 +164,63 @@ export function DashboardView({
     return () => { cleanup(); };
   }, []);
 
+  useEffect(() => {
+    if (!userId || !window.api) {
+      setInsightLoading(false);
+      setAgentInsight('Sign in to receive personalized dashboard insights.');
+      return;
+    }
+
+    let cancelled = false;
+    setInsightLoading(true);
+
+    void window.api.queryAgent({
+      intent: 'dashboard_insight',
+      userId,
+      context: {
+        session_active: sessionActive,
+        current_workflow: currentWorkflow || null,
+        lift_count: liftCount,
+        total_pause_minutes: Math.floor(totalPauseMs / 60000),
+        planned_duration_minutes: profile.sessionLength,
+        recent_session_count: sessions.length,
+        streak_days: streak,
+      },
+    }).then((response) => {
+      if (cancelled) return;
+      const data = response as AgentResponse;
+      const text = data.text?.trim();
+      if (text) {
+        setAgentInsight(text);
+        return;
+      }
+      if (sessions.length === 0) {
+        setAgentInsight('Complete your first session to receive a personalized insight.');
+        return;
+      }
+      setAgentInsight(data.error ? `agent unavailable: ${data.error}` : 'agent unavailable');
+    }).catch((error) => {
+      if (cancelled) return;
+      const message = error instanceof Error ? error.message : String(error);
+      setAgentInsight(`agent unavailable: ${message}`);
+    }).finally(() => {
+      if (!cancelled) setInsightLoading(false);
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    currentWorkflow,
+    liftCount,
+    profile.sessionLength,
+    sessionActive,
+    sessions.length,
+    streak,
+    totalPauseMs,
+    userId,
+  ]);
+
   const activeFriends = friends.filter((f) => {
     const live = liveStates.get(f.id);
     return live?.status === 'docked' || live?.status === 'undocked' || f.hardware_status === 'docked';
@@ -165,24 +234,39 @@ export function DashboardView({
 
           <div className="mt-8 font-mono text-[10px] uppercase tracking-[0.24em] text-ink-faint">
             {sessionActive
-              ? orbStatus === 'undocked'
-                ? 'paused - phone lifted'
-                : `focused - ${currentWorkflow || 'session active'}`
+              ? isPaused
+                ? 'session paused'
+                : orbStatus === 'undocked'
+                  ? 'paused — phone lifted'
+                  : goalReached
+                    ? `goal reached — ${currentWorkflow || 'keep going'}`
+                    : `focused — ${currentWorkflow || 'session active'}`
               : 'waiting for hardware'}
           </div>
 
           <div
             className={cn(
               'mt-3 font-serif text-[88px] font-light italic leading-none tracking-[-0.04em] tabular-nums',
-              sessionActive ? 'text-ink' : 'text-ink-faint',
+              !sessionActive && 'text-ink-faint',
+              sessionActive && !isPaused && !goalReached && 'text-ink',
+              isPaused && 'text-cool-blue',
+              goalReached && !isPaused && 'text-amber',
             )}
           >
             {sessionActive ? fmt(secondsElapsed) : '--:--'}
           </div>
 
           <div className="mt-3 font-mono text-[11px] uppercase tracking-[0.14em] text-ink-faint">
-            {sessionActive ? 'elapsed' : 'dock your phone to start a session'}
+            {sessionActive
+              ? `elapsed · goal ${profile.sessionLength}m`
+              : 'dock your phone to start a session'}
           </div>
+
+          {goalReached && !isPaused && (
+            <div className="mt-3 rounded border border-amber/40 bg-amber/10 px-4 py-2 font-mono text-[10px] uppercase tracking-[0.12em] text-amber">
+              session goal reached ✓
+            </div>
+          )}
 
           {sessionActive && (
             <div className="mt-4 flex items-center gap-3 font-mono text-[11px] tracking-wide text-ink-dim">
@@ -205,6 +289,23 @@ export function DashboardView({
                 </>
               )}
             </div>
+          )}
+
+          {sessionPausedAt && sessionActive && (
+            <PauseBudgetBanner
+              pausedAt={sessionPausedAt}
+              budgetMinutes={pauseBudgetMinutes}
+              onResume={onResumeSession}
+            />
+          )}
+
+          {sessionActive && (
+            <button
+              onClick={onEndSession}
+              className="mt-5 rounded border border-line-mid px-5 py-2 font-mono text-[10px] uppercase tracking-[0.12em] text-ink-faint transition-colors hover:border-red-500/40 hover:text-red-400"
+            >
+              End Session
+            </button>
           )}
 
         </div>
@@ -270,9 +371,7 @@ export function DashboardView({
               </span>
             </div>
             <div className="font-serif text-sm italic leading-relaxed text-ink-dim">
-              {sessions.length === 0
-                ? 'Complete your first session to receive a personalized insight.'
-                : insight}
+              {insightLoading ? 'asking gemma...' : agentInsight}
             </div>
           </div>
         </div>
@@ -299,6 +398,52 @@ function ProfileAvatar({
   }
 
   return <PixelOrbMini color={color} pulse={pulse} />;
+}
+
+function PauseBudgetBanner({
+  pausedAt,
+  budgetMinutes,
+  onResume,
+}: {
+  pausedAt: string;
+  budgetMinutes: number;
+  onResume: () => void;
+}) {
+  const elapsedMs = Date.now() - Date.parse(pausedAt);
+  const elapsedMin = Math.floor(elapsedMs / 60000);
+  const elapsedSec = Math.floor((elapsedMs % 60000) / 1000);
+  const budgetMs = budgetMinutes * 60 * 1000;
+  const remainingMs = Math.max(0, budgetMs - elapsedMs);
+  const remainingMin = Math.floor(remainingMs / 60000);
+  const remainingSec = Math.floor((remainingMs % 60000) / 1000);
+  const overBudget = elapsedMs >= budgetMs;
+
+  return (
+    <div className={cn(
+      'mt-4 rounded border px-4 py-3 font-mono text-[10px]',
+      overBudget
+        ? 'border-red-500/40 bg-red-500/10 text-red-400'
+        : 'border-amber/30 bg-amber/10 text-amber',
+    )}>
+      <div className="uppercase tracking-[0.12em]">
+        {overBudget ? 'pause budget exceeded — session ending' : 'session paused — overlay closed'}
+      </div>
+      <div className="mt-1 text-[9px] text-ink-faint">
+        {overBudget
+          ? `paused ${elapsedMin}m ${elapsedSec}s`
+          : `${remainingMin}m ${remainingSec}s remaining before auto-end`}
+      </div>
+      {!overBudget && (
+        <button
+          type="button"
+          onClick={onResume}
+          className="mt-3 rounded border border-amber/40 bg-bg-deeper/40 px-3 py-1.5 text-[9px] uppercase tracking-[0.12em] text-amber transition-colors hover:bg-amber/10"
+        >
+          Resume Session
+        </button>
+      )}
+    </div>
+  );
 }
 
 function Stat({ label, value, active = false }: { label: string; value: string; active?: boolean }) {
