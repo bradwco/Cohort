@@ -111,6 +111,17 @@
       <div class="avatars" id="avatars"></div>
       <div class="divider"></div>
       <div class="timer" id="timer">25:00</div>
+      <button class="stop" id="stop" aria-label="Pause session" title="Pause">
+        <svg
+          width="10"
+          height="10"
+          viewBox="0 0 10 10"
+          fill="currentColor"
+          aria-hidden="true"
+        >
+          <rect x="0" y="0" width="10" height="10" rx="1.5" />
+        </svg>
+      </button>
     </div>
 
     <script src="ai/pixel_avatar.js"></script>
@@ -344,6 +355,20 @@
 
       syncFriendAvatars();
       setInterval(syncFriendAvatars, FRIEND_SYNC_MS);
+
+      document.getElementById("stop").addEventListener("click", async () => {
+        try {
+          window.electronAPI.updateFocusState("idle").catch(() => {});
+          if (gemini?.history?.length) {
+            await window.electronAPI.saveConversationHistory(gemini.history).catch(() => {});
+          }
+          await window.electronAPI.pauseSession();
+        } catch (e) {
+          console.warn("[session] pause failed:", e.message);
+        } finally {
+          window.close();
+        }
+      });
 
       let lastActivityTime = Date.now();
       // Filters out hand-tremor / wireless-mouse jitter so the overlay
