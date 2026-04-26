@@ -30,6 +30,7 @@ export interface Session {
   pause_minutes_used: number;
   flow_score: number | null;
   ai_summary: string | null;
+  conversation_history: unknown[] | null;
 }
 
 export interface Friendship {
@@ -337,7 +338,8 @@ export async function getCohorts(userId: string): Promise<Cohort[]> {
 }
 
 export async function leaveCohort(userId: string, cohortId: string): Promise<boolean> {
-  const { error } = await getSupabaseClient()
+  const db = getSupabaseClient();
+  const { error } = await db
     .from('cohort_members')
     .delete()
     .eq('cohort_id', cohortId)
@@ -346,6 +348,22 @@ export async function leaveCohort(userId: string, cohortId: string): Promise<boo
     console.error('leaveCohort:', error.message);
     return false;
   }
+
+  const { data: remaining, error: verifyError } = await db
+    .from('cohort_members')
+    .select('cohort_id')
+    .eq('cohort_id', cohortId)
+    .eq('user_id', userId)
+    .limit(1);
+  if (verifyError) {
+    console.error('leaveCohort verify:', verifyError.message);
+    return false;
+  }
+  if ((remaining ?? []).length > 0) {
+    console.error('leaveCohort: membership row still exists after delete');
+    return false;
+  }
+
   return true;
 }
 

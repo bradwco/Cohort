@@ -10,7 +10,61 @@ export type Session = {
   lifts: number;
   task: string;
   color: string;
+  summary?: string;
+  conversationHistory?: unknown[] | null;
 };
+
+type ConversationTurn = {
+  role: 'user' | 'assistant' | 'system';
+  text: string;
+};
+
+function getString(value: unknown): string {
+  return typeof value === 'string' ? value.trim() : '';
+}
+
+function extractPartText(part: unknown): string {
+  if (typeof part === 'string') return part;
+  if (!part || typeof part !== 'object') return '';
+  const record = part as Record<string, unknown>;
+  return getString(record.text) || getString(record.content);
+}
+
+function extractMessageText(entry: unknown): string {
+  if (typeof entry === 'string') return entry.trim();
+  if (!entry || typeof entry !== 'object') return '';
+
+  const record = entry as Record<string, unknown>;
+  const direct = getString(record.text) || getString(record.content) || getString(record.message);
+  if (direct) return direct;
+
+  const parts = Array.isArray(record.parts) ? record.parts : Array.isArray(record.content) ? record.content : null;
+  if (!parts) return '';
+
+  return parts.map(extractPartText).filter(Boolean).join('\n').trim();
+}
+
+function normalizeRole(value: unknown): ConversationTurn['role'] {
+  const role = getString(value).toLowerCase();
+  if (role === 'model' || role === 'assistant') return 'assistant';
+  if (role === 'user') return 'user';
+  return 'system';
+}
+
+function formatConversation(history: unknown[] | null | undefined): ConversationTurn[] {
+  if (!Array.isArray(history)) return [];
+
+  return history
+    .map((entry) => {
+      const role =
+        entry && typeof entry === 'object'
+          ? normalizeRole((entry as Record<string, unknown>).role)
+          : 'system';
+      const text = extractMessageText(entry);
+      return text ? { role, text } : null;
+    })
+    .filter((turn): turn is ConversationTurn => Boolean(turn));
+}
 
 function Stat({ label, value, accent }: { label: string; value: string | number; accent?: boolean }) {
   return (
@@ -30,6 +84,8 @@ function Stat({ label, value, accent }: { label: string; value: string | number;
 
 export function SessionRow({ session, delay }: { session: Session; delay: number }) {
   const [open, setOpen] = useState(false);
+  const conversation = formatConversation(session.conversationHistory);
+  const hasConversation = conversation.length > 0;
 
   return (
     <motion.div
@@ -83,18 +139,53 @@ export function SessionRow({ session, delay }: { session: Session; delay: number
               <div className="mb-2.5 flex items-center gap-1.5">
                 <SparkIcon />
                 <span className="font-mono text-[10px] tracking-[0.14em] text-amber">
-                  GEMMA · POST-MORTEM
+                  GEMMA - POST-MORTEM
                 </span>
               </div>
               <div className="max-w-[720px] font-serif text-sm italic leading-[1.7] text-ink-dim">
-                You lifted your phone{' '}
-                <strong className="text-ink">{session.lifts} times</strong>, but always
-                put it back within 30 seconds. Your focus was sharp, but you study best
-                when you take a 10-minute break at the 1-hour mark.
-                <br />
-                <br />
-                <em className="text-amber-dim">Next time, try a 60/10 Pomodoro split.</em>
+                {session.summary ? (
+                  <>
+                    {session.summary}
+                    <br />
+                    <br />
+                    <em className="text-amber-dim">Next time, keep the same rhythm and ask Gemma for help the moment you feel stuck.</em>
+                  </>
+                ) : (
+                  <>
+                    You lifted your phone{' '}
+                    <strong className="text-ink">{session.lifts} times</strong>, but always
+                    put it back within 30 seconds. Your focus was sharp, but you study best
+                    when you take a 10-minute break at the 1-hour mark.
+                    <br />
+                    <br />
+                    <em className="text-amber-dim">Next time, try a 60/10 Pomodoro split.</em>
+                  </>
+                )}
               </div>
+
+              {hasConversation && (
+                <div className="mt-5 flex max-w-[760px] flex-col gap-3 border-t border-line pt-4">
+                  <div className="flex items-center gap-1.5">
+                    <SparkIcon />
+                    <span className="font-mono text-[10px] tracking-[0.14em] text-amber">
+                      GEMMA - CONVERSATION
+                    </span>
+                  </div>
+                  {conversation.map((turn, index) => (
+                    <div
+                      key={`${turn.role}-${index}`}
+                      className="rounded border border-line bg-bg-deeper/70 px-3.5 py-3"
+                    >
+                      <div className="mb-1.5 font-mono text-[9px] uppercase tracking-[0.14em] text-ink-faint">
+                        {turn.role === 'assistant' ? 'Gemma' : turn.role}
+                      </div>
+                      <div className="whitespace-pre-wrap font-serif text-sm leading-[1.65] text-ink-dim">
+                        {turn.text}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
           </motion.div>
         )}

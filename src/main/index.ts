@@ -40,7 +40,13 @@ if (!gotTheLock) {
   let overlayWin: BrowserWindow | null = null;
 
   function showOverlay(): void {
-    if (overlayWin && !overlayWin.isDestroyed()) return;
+    if (overlayWin && !overlayWin.isDestroyed()) {
+      mainWin?.hide();
+      overlayWin.show();
+      overlayWin.focus();
+      return;
+    }
+    mainWin?.hide();
     overlayWin = createOverlayWindow();
     overlayWin.on('closed', () => {
       overlayWin = null;
@@ -54,11 +60,12 @@ if (!gotTheLock) {
   }
 
   app.whenReady().then(() => {
-    registerIpcHandlers();
+    registerIpcHandlers({
+      onResumeSession: showOverlay,
+    });
     mainWin = createMainWindow();
 
     setDockedCallback(() => {
-      mainWin?.hide();
       showOverlay();
     });
 

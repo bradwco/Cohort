@@ -30,14 +30,22 @@ import {
   subscribeFriends,
   getPauseStats,
   setActiveSessionId,
+  setActiveSessionDetails,
   getActiveSessionId,
+  getActiveSessionSnapshot,
   simulateHardwareEvent,
   resetPauseStats,
+  resumePause,
+  markPaused,
 } from '../mqtt';
 
 let activePlannedDurationMinutes = 50;
 
-export function registerIpcHandlers(): void {
+type IpcHandlerOptions = {
+  onResumeSession?: () => void;
+};
+
+export function registerIpcHandlers(options: IpcHandlerOptions = {}): void {
   ipcMain.handle(CH.PING, () => 'pong');
 
   // Profiles
@@ -72,6 +80,7 @@ export function registerIpcHandlers(): void {
   // Overlay pause (closes overlay and notifies desktop renderer)
   ipcMain.handle('pause-session', () => {
     const pausedAt = new Date().toISOString();
+    void markPaused(pausedAt);
     for (const win of BrowserWindow.getAllWindows()) {
       win.webContents.send(PUSH.SESSION_PAUSED, { pausedAt });
     }
@@ -83,7 +92,14 @@ export function registerIpcHandlers(): void {
     async (_e, userId: string, workflowGroup: string, durationMins: number) => {
       activePlannedDurationMinutes = durationMins;
       const session = await startSession(userId, workflowGroup, durationMins);
-      if (session) setActiveSessionId(session.id);
+      if (session) {
+        setActiveSessionId(session.id);
+        setActiveSessionDetails({
+          sessionStartedAt: session.started_at,
+          workflowGroup,
+          plannedDurationMinutes: durationMins,
+        });
+      }
       return session;
     },
   );
@@ -92,6 +108,11 @@ export function registerIpcHandlers(): void {
     if (!sessionId) return;
     await endSession(sessionId, pauseMinutes, flowScore, aiSummary);
     setActiveSessionId(null);
+  });
+  ipcMain.handle(CH.SESSION_RESUME, async () => {
+    const result = await resumePause({ openOverlay: false });
+    options.onResumeSession?.();
+    return result;
   });
   ipcMain.handle(CH.SESSION_HISTORY, (_e, userId: string) => getSessionHistory(userId));
 
@@ -141,6 +162,14 @@ export function registerIpcHandlers(): void {
   });
 
   ipcMain.handle('get-config', () => ({
+    ...(() => {
+      const snapshot = getActiveSessionSnapshot();
+      return {
+        SESSION_STARTED_AT: snapshot.sessionStartedAt ?? '',
+        TOTAL_PAUSE_MS: snapshot.totalPauseMs,
+        ACTIVE_WORKFLOW_GROUP: snapshot.workflowGroup ?? '',
+      };
+    })(),
     GEMINI_API_KEY: (import.meta.env.GEMINI_API_KEY as string) ?? '',
     LOCAL_VLM_URL: (import.meta.env.LOCAL_VLM_URL as string) ?? 'http://127.0.0.1:11434/api/chat',
     LOCAL_VLM_MODEL: (import.meta.env.LOCAL_VLM_MODEL as string) ?? 'moondream',
@@ -148,7 +177,7 @@ export function registerIpcHandlers(): void {
     SUPABASE_ANON_KEY: (import.meta.env.SUPABASE_ANON_KEY as string) ?? '',
     USER_ID: getOverlayUserId(),
     SESSION_ID: getActiveSessionId() ?? '',
-    PLANNED_DURATION_MINUTES: activePlannedDurationMinutes,
+    PLANNED_DURATION_MINUTES: getActiveSessionSnapshot().plannedDurationMinutes ?? activePlannedDurationMinutes,
   }));
 
   ipcMain.handle('create-session', async (_e, { plannedDurationMinutes, workflowGroup }: { plannedDurationMinutes: number; workflowGroup: string }) => {
@@ -156,7 +185,14 @@ export function registerIpcHandlers(): void {
     if (!userId) return null;
     activePlannedDurationMinutes = plannedDurationMinutes;
     const session = await startSession(userId, workflowGroup, plannedDurationMinutes);
-    if (session) setActiveSessionId(session.id);
+    if (session) {
+      setActiveSessionId(session.id);
+      setActiveSessionDetails({
+        sessionStartedAt: session.started_at,
+        workflowGroup,
+        plannedDurationMinutes,
+      });
+    }
     return session?.id ?? null;
   });
 

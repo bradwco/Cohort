@@ -54,17 +54,25 @@ export function HwSimulator({
   const [sessionWorkflow, setSessionWorkflow] = useState<string>('Focus Session');
   const [sessionNote, setSessionNote] = useState('');
 
-  useEffect(() => {
+  async function loadCohorts() {
     if (!window.api || !currentUserId) return;
-    void window.api.getCohorts(currentUserId).then((rows) => {
-      const list = (rows as CohortRow[]) ?? [];
-      setCohorts(list);
-      setCohortsLoaded(true);
-      if (list.length > 0 && !activeGroup) {
-        onSelectGroup(list[0]!.name);
-      }
-    });
+    setCohortsLoaded(false);
+    const rows = await window.api.getCohorts(currentUserId);
+    const list = (rows as CohortRow[]) ?? [];
+    setCohorts(list);
+    setCohortsLoaded(true);
+    if (list.length > 0 && !activeGroup) {
+      onSelectGroup(list[0]!.name);
+    }
+  }
+
+  useEffect(() => {
+    void loadCohorts();
   }, [currentUserId]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => {
+    if (open) void loadCohorts();
+  }, [open]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     if (!window.api || !currentUserId) return;
@@ -154,13 +162,21 @@ export function HwSimulator({
 
   async function dock() {
     const trimmedNote = sessionNote.trim();
-    if (!trimmedNote || !activeGroup) return;
+    if (!cohortsLoaded) return;
+    if (cohorts.length === 0) {
+      const message = 'Join an existing cohort in the Friends tab before docking your phone.';
+      push(`ERR ${message}`);
+      window.alert(message);
+      return;
+    }
+
+    const workflowGroup = trimmedNote || activeGroup || cohorts[0]?.name || 'Focus Session';
 
     const nextStartedAt = sessionStartedAt ?? new Date().toISOString();
     const payload = {
       status: 'docked',
       duration,
-      workflowGroup: trimmedNote,
+      workflowGroup,
       sessionStartedAt: nextStartedAt,
       plannedDurationMinutes: sessionDuration || duration,
     };
@@ -169,7 +185,7 @@ export function HwSimulator({
       setStatus('docked');
       setSessionStartedAt(nextStartedAt);
       setSessionDuration(duration);
-      setSessionWorkflow(trimmedNote);
+      setSessionWorkflow(workflowGroup);
     }
   }
 
@@ -233,7 +249,7 @@ export function HwSimulator({
 
   const user = users.find((u) => u.id === userId);
   const noCohorts = cohortsLoaded && cohorts.length === 0;
-  const canDock = status !== 'docked' && !!userId && !!sessionNote.trim() && !!activeGroup && cohorts.length > 0;
+  const canTryDock = status !== 'docked' && !!userId && cohortsLoaded;
 
   return (
     <div className="fixed bottom-5 left-5 z-[100] font-mono">
@@ -297,7 +313,7 @@ export function HwSimulator({
             )}
             {noCohorts && (
               <div className="rounded border border-amber/30 bg-amber/10 px-2.5 py-1.5 text-[9px] text-amber">
-                join or create a cohort in the Friends tab first
+                join an existing cohort in the Friends tab first
               </div>
             )}
             {cohorts.length > 0 && (
@@ -324,7 +340,7 @@ export function HwSimulator({
           {/* Note */}
           <div className="mb-3">
             <div className="mb-1 flex items-center justify-between text-[9px] text-ink-faint">
-              <span>note / what you are doing</span>
+              <span>note / what you are doing optional</span>
               <span>{sessionNote.length}/{NOTE_LIMIT}</span>
             </div>
             <textarea
@@ -379,7 +395,7 @@ export function HwSimulator({
           {/* Controls */}
           <div className="mb-2 grid grid-cols-2 gap-1.5">
             <button
-              disabled={!canDock}
+              disabled={!canTryDock}
               onClick={dock}
               className="rounded border border-amber/40 bg-amber/10 px-2 py-1.5 text-[10px] text-amber transition-opacity disabled:opacity-30"
             >

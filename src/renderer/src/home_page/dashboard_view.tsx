@@ -83,6 +83,7 @@ type Props = {
   currentWorkflow: string;
   sessionPausedAt: string | null;
   pauseBudgetMinutes: number;
+  onResumeSession: () => void;
   onEndSession: () => void;
 };
 
@@ -97,6 +98,7 @@ export function DashboardView({
   currentWorkflow,
   sessionPausedAt,
   pauseBudgetMinutes,
+  onResumeSession,
   onEndSession,
 }: Props) {
   const sessionActive = orbStatus !== 'offline';
@@ -237,6 +239,7 @@ export function DashboardView({
             <PauseBudgetBanner
               pausedAt={sessionPausedAt}
               budgetMinutes={pauseBudgetMinutes}
+              onResume={onResumeSession}
             />
           )}
 
@@ -343,7 +346,15 @@ function ProfileAvatar({
   return <PixelOrbMini color={color} pulse={pulse} />;
 }
 
-function PauseBudgetBanner({ pausedAt, budgetMinutes }: { pausedAt: string; budgetMinutes: number }) {
+function PauseBudgetBanner({
+  pausedAt,
+  budgetMinutes,
+  onResume,
+}: {
+  pausedAt: string;
+  budgetMinutes: number;
+  onResume: () => void;
+}) {
   const elapsedMs = Date.now() - Date.parse(pausedAt);
   const elapsedMin = Math.floor(elapsedMs / 60000);
   const elapsedSec = Math.floor((elapsedMs % 60000) / 1000);
@@ -368,6 +379,15 @@ function PauseBudgetBanner({ pausedAt, budgetMinutes }: { pausedAt: string; budg
           ? `paused ${elapsedMin}m ${elapsedSec}s`
           : `${remainingMin}m ${remainingSec}s remaining before auto-end`}
       </div>
+      {!overBudget && (
+        <button
+          type="button"
+          onClick={onResume}
+          className="mt-3 rounded border border-amber/40 bg-bg-deeper/40 px-3 py-1.5 text-[9px] uppercase tracking-[0.12em] text-amber transition-colors hover:bg-amber/10"
+        >
+          Resume Session
+        </button>
+      )}
     </div>
   );
 }
