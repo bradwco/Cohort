@@ -56,6 +56,7 @@ import {
 } from '../session_metrics';
 
 let activePlannedDurationMinutes = 50;
+let pendingConversationHistory: unknown[] | undefined;
 
 type IpcHandlerOptions = {
   onResumeSession?: () => void;
@@ -177,7 +178,9 @@ export function registerIpcHandlers(options: IpcHandlerOptions = {}): void {
     const sessionId = getActiveSessionId();
     if (!sessionId) return;
     const metrics = finishSessionMetrics(sessionId);
-    await endSession(sessionId, pauseMinutes, metrics ? calculateFlowScore(metrics) : flowScore, aiSummary, undefined, metrics ?? undefined);
+    const history = pendingConversationHistory;
+    pendingConversationHistory = undefined;
+    await endSession(sessionId, pauseMinutes, metrics ? calculateFlowScore(metrics) : flowScore, aiSummary, history, metrics ?? undefined);
     setActiveSessionId(null);
     void triggerVoiceEvent('session_end');
   });
@@ -284,16 +287,24 @@ export function registerIpcHandlers(options: IpcHandlerOptions = {}): void {
     return session?.id ?? null;
   });
 
+  ipcMain.handle('save-conversation-history', (_e, history: unknown[]) => {
+    pendingConversationHistory = Array.isArray(history) && history.length > 0 ? history : undefined;
+  });
+
   ipcMain.handle('end-session', async (_e, { sessionId, flowScore, conversationHistory }: { sessionId: string; flowScore: number | null; conversationHistory: unknown[] }) => {
     if (!sessionId) return;
     const userId = getOverlayUserId();
     const metrics = finishSessionMetrics(sessionId);
+    const history = Array.isArray(conversationHistory) && conversationHistory.length > 0
+      ? conversationHistory
+      : pendingConversationHistory;
+    pendingConversationHistory = undefined;
     await endSession(
       sessionId,
       0,
       metrics ? calculateFlowScore(metrics) : flowScore ?? 0,
       '',
-      conversationHistory,
+      history,
       metrics ?? undefined,
     );
     if (userId) await updateProfile(userId, { hardware_status: 'offline' });
