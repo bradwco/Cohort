@@ -6,6 +6,7 @@ import { createOverlayWindow } from "./windows/overlay_window";
 import { registerIpcHandlers, resolveAuthCallback } from "./ipc";
 import { startAgentServer, stopAgentServer } from "./agent";
 import { destroyMqtt, setDockedCallback, setOfflineCallback } from "./mqtt";
+import { destroyHardwareSerial } from "./hardware_serial";
 
 // Load .env into process.env for the main process
 function loadEnv(): void {
@@ -115,6 +116,7 @@ app.whenReady().then(() => {
 
   app.on("window-all-closed", () => {
     destroyMqtt();
+    destroyHardwareSerial();
     stopAgentServer();
     if (process.platform !== "darwin") app.quit();
   });

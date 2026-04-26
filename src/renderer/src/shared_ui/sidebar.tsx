@@ -23,9 +23,10 @@ type Props = {
   activeView: ViewId;
   onSelect: (id: ViewId) => void;
   profile?: OnboardingData;
+  hardwareConnected?: boolean;
 };
 
-export function Sidebar({ activeView, onSelect, profile }: Props) {
+export function Sidebar({ activeView, onSelect, profile, hardwareConnected = false }: Props) {
   const displayName = profile?.displayName || 'focus user';
   const username = profile?.username || displayName.toLowerCase().replace(/[^a-z0-9]+/g, '');
   const sessionLength = profile?.sessionLength ?? 45;
@@ -67,13 +68,30 @@ export function Sidebar({ activeView, onSelect, profile }: Props) {
       </nav>
 
       <div className="flex flex-col gap-3 border-t border-line pt-4">
-        <div className="flex items-center gap-2.5 rounded border border-amber/15 bg-amber/[0.04] px-3 py-2.5">
-          <span className="flex h-2.5 w-2.5 animate-pulse2 items-center justify-center rounded-full bg-amber/20">
-            <span className="h-1 w-1 rounded-full bg-amber" />
+        <div
+          className={cn(
+            'flex items-center gap-2.5 rounded border px-3 py-2.5',
+            hardwareConnected
+              ? 'border-amber/15 bg-amber/[0.04]'
+              : 'border-line bg-white/[0.02]',
+          )}
+        >
+          <span
+            className={cn(
+              'flex h-2.5 w-2.5 items-center justify-center rounded-full',
+              hardwareConnected ? 'animate-pulse2 bg-amber/20' : 'bg-ink-faint/15',
+            )}
+          >
+            <span className={cn('h-1 w-1 rounded-full', hardwareConnected ? 'bg-amber' : 'bg-ink-faint')} />
           </span>
           <div className="flex-1">
-            <div className="font-mono text-[10px] uppercase tracking-[0.1em] text-amber">
-              dock connected
+            <div
+              className={cn(
+                'font-mono text-[10px] uppercase tracking-[0.1em]',
+                hardwareConnected ? 'text-amber' : 'text-ink-faint',
+              )}
+            >
+              {hardwareConnected ? 'orb connected' : 'orb not connected'}
             </div>
             {/* <div className="mt-0.5 font-mono text-[9px] text-ink-faint">
               192.168.1.42 · 24ms

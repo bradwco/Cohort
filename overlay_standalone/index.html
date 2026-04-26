@@ -111,17 +111,6 @@
       <div class="avatars" id="avatars"></div>
       <div class="divider"></div>
       <div class="timer" id="timer">25:00</div>
-      <button class="stop" id="stop" aria-label="Pause session" title="Pause">
-        <svg
-          width="10"
-          height="10"
-          viewBox="0 0 10 10"
-          fill="currentColor"
-          aria-hidden="true"
-        >
-          <rect x="0" y="0" width="10" height="10" rx="1.5" />
-        </svg>
-      </button>
     </div>
 
     <script src="ai/pixel_avatar.js"></script>
@@ -224,6 +213,7 @@
       })();
 
       // ── Friend avatars (poll every 30s) ────────────────────────────────
+      const FRIEND_SYNC_MS = 5_000;
       const friendAvatarMap = {}; // userId → { el: HTMLElement, focusState: string | null }
 
       const ORB_COLORS = {
@@ -319,6 +309,7 @@
                 p.focus_state,
                 ")",
               );
+              window.electronAPI.sendHardwareSerialCommand?.("1");
             } else if (isDocked && existing) {
               const newFocusState = p.focus_state ?? null;
               if (existing.focusState !== newFocusState) {
@@ -336,6 +327,7 @@
               existing.el.remove();
               delete friendAvatarMap[p.id];
               console.log("[friends] disappeared:", p.username);
+              window.electronAPI.sendHardwareSerialCommand?.("8");
             }
           }
 
@@ -544,8 +536,10 @@
       // Local-first pipeline: cheap thumbnail capture -> perceptual hash gate ->
       // localhost vision model -> rolling five-minute productivity score.
       const IDLE_MS = 30_000;
-      const ACTIVE_CHECK_MS = 5_000;
-      const CLASSIFY_COOLDOWN = 10_000;
+      const IDLE_WAKE_MS = 8_000;
+      const ACTIVE_CHECK_MS = 1_000;
+      const CLASSIFY_COOLDOWN = 2_500;
+      const DISTRACTED_CLASSIFY_COOLDOWN = 2_500;
       const HASH_DIFF_THRESHOLD = 13; // roughly 5% of a 16x16 average hash
       // Require N consecutive 1s polls of detected activity before exiting
       // idle. Combined with the overlay mousemove jitter filter above, this
@@ -561,10 +555,12 @@
       let currentFocusState   = 'productive';
       let lastContentChangeTime = 0; // updated when screen content changes (video detection)
       let activeStreak = 0;
+      let distractedProductiveStreak = 0;
 
       function setFocusState(state) {
         if (state === currentFocusState) return;
         currentFocusState = state;
+        if (state !== "distracted") distractedProductiveStreak = 0;
         document.body.classList.remove("state-distracted", "state-idle");
         if (state !== "productive")
           document.body.classList.add("state-" + state);
@@ -602,12 +598,13 @@
           const isActive = sysSec * 1000 < IDLE_MS
             || (now - lastActivityTime) < IDLE_MS
             || (now - lastContentChangeTime) < IDLE_MS;
+          const userActiveForIdleWake = sysSec * 1000 < IDLE_WAKE_MS;
 
           // When idle: require sustained activity (ACTIVE_STREAK_REQUIRED
           // consecutive 1s polls) before flipping back to productive, so a
           // single sub-second jitter doesn't pop the user out of idle.
           if (currentFocusState === 'idle') {
-            if (isActive) {
+            if (userActiveForIdleWake) {
               activeStreak += 1;
               if (activeStreak >= ACTIVE_STREAK_REQUIRED) {
                 activeStreak = 0;
@@ -633,7 +630,10 @@
           }
 
           // Active + changed screen + local model available -> classify
-          if (classifyInFlight || now - lastClassifyTime < CLASSIFY_COOLDOWN)
+          const classifyCooldown = currentFocusState === 'distracted'
+            ? DISTRACTED_CLASSIFY_COOLDOWN
+            : CLASSIFY_COOLDOWN;
+          if (classifyInFlight || now - lastClassifyTime < classifyCooldown)
             return;
 
           classifyInFlight = true;
@@ -663,6 +663,18 @@
           focusClassifier
             .classify(thumbUrl)
             .then((result) => {
+              const productiveInstant = result === 'deep_work' || result === 'admin' || result === 'productive';
+              if (currentFocusState === 'distracted') {
+                distractedProductiveStreak = productiveInstant ? distractedProductiveStreak + 1 : 0;
+                if (distractedProductiveStreak >= 2) {
+                  distractedProductiveStreak = 0;
+                  focusSmoother.reset();
+                  setFocusState('productive');
+                  if (dbg) dbg.textContent = `${result} · recovered from distracted`;
+                  return;
+                }
+              }
+
               const smoothed = focusSmoother.add(result);
               if (smoothed.ready) setFocusState(smoothed.label);
               if (dbg) {

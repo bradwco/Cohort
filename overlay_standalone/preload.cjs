@@ -13,4 +13,5 @@ contextBridge.exposeInMainWorld('electronAPI', {
   updateFocusState:     (state)  => ipcRenderer.invoke('update-focus-state', state),
   getSystemIdleSecs:    ()       => ipcRenderer.invoke('get-system-idle-secs'),
   overlayPause:         ()       => ipcRenderer.invoke('overlay-pause'),
+  sendHardwareSerialCommand: (command) => ipcRenderer.invoke('hardware:serial-command', command),
 });

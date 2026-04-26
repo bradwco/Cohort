@@ -57,6 +57,9 @@ export const CH = {
   MQTT_PUBLISH_COMMAND: 'mqtt:publish-command',
   MQTT_SUBSCRIBE_FRIENDS: 'mqtt:subscribe-friends',
   MQTT_PAUSE_STATS: 'mqtt:pause-stats',
+
+  // Hardware serial
+  HARDWARE_SERIAL_COMMAND: 'hardware:serial-command',
 } as const;
 
 // Renderer-bound push events (main -> renderer via webContents.send)
