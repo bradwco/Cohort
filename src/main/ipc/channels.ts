@@ -40,6 +40,11 @@ export const CH = {
   // App
   SAVE_USER_SESSION: 'app:save-user-session',
 
+  // ElevenLabs voice
+  ELEVENLABS_SETTINGS_GET: 'elevenlabs:settings-get',
+  ELEVENLABS_SETTINGS_SET: 'elevenlabs:settings-set',
+  ELEVENLABS_TEST: 'elevenlabs:test',
+
   // Shell
   OPEN_EXTERNAL: 'shell:open-external',
   OPEN_AUTH_WINDOW: 'shell:open-auth-window',
@@ -65,5 +70,5 @@ export const PUSH = {
   FRIEND_NUDGE: 'friends:nudge',
   DEEP_LINK: 'app:deep-link',
   SESSION_PAUSED: 'session:paused',
-  HARDWARE_SERIAL_STATUS: 'hardware:serial-status',
+  PLAY_AUDIO: 'elevenlabs:play-audio',
 } as const;

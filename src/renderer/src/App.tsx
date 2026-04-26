@@ -100,6 +100,15 @@ function DashboardApp({
     void window.api.initMqtt(userId);
   }, [userId]);
 
+  useEffect(() => {
+    if (!window.api) return;
+    const cleanup = window.api.onPlayAudio((base64: string) => {
+      const audio = new Audio(`data:audio/mpeg;base64,${base64}`);
+      audio.play().catch((err) => console.error('[audio]', err));
+    });
+    return () => { cleanup(); };
+  }, []);
+
   // Wallclock-derived elapsed: this stays in lockstep with the overlay's
   // right-column timer because both read the same sessionStartedAt and
   // accumulated pause from the main process. While paused, we freeze at

@@ -111,6 +111,17 @@ const api = {
     ipcRenderer.on(PUSH.DEEP_LINK, h);
     return () => ipcRenderer.off(PUSH.DEEP_LINK, h);
   },
+
+  // ElevenLabs voice
+  getElevenLabsSettings: () => ipcRenderer.invoke(CH.ELEVENLABS_SETTINGS_GET),
+  setElevenLabsSettings: (settings: Record<string, unknown>) =>
+    ipcRenderer.invoke(CH.ELEVENLABS_SETTINGS_SET, settings),
+  testElevenLabsVoice: (settings?: Record<string, unknown>) => ipcRenderer.invoke(CH.ELEVENLABS_TEST, settings),
+  onPlayAudio: (cb: (base64: string) => void) => {
+    const h = (_e: Electron.IpcRendererEvent, base64: unknown) => cb(base64 as string);
+    ipcRenderer.on(PUSH.PLAY_AUDIO, h);
+    return () => ipcRenderer.off(PUSH.PLAY_AUDIO, h);
+  },
 };
 
 contextBridge.exposeInMainWorld('api', api);

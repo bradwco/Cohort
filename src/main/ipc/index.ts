@@ -27,6 +27,14 @@ import {
 } from "../supabase";
 import { queryAgent, type AgentRequest } from "../agent";
 import {
+  getElevenLabsSettings,
+  saveElevenLabsSettings,
+  testVoice,
+  triggerVoiceEvent,
+  setCurrentUsername,
+  type ElevenLabsSettings,
+} from '../elevenlabs';
+import {
   initMqtt,
   publishCommand,
   subscribeFriends,
@@ -49,6 +57,7 @@ import {
 import { initHardwareSerial, sendFocusStateToHardwareSerial, sendHardwareSerialCommand } from '../hardware_serial';
 
 let activePlannedDurationMinutes = 50;
+let pendingConversationHistory: unknown[] | undefined;
 
 type IpcHandlerOptions = {
   onResumeSession?: () => void;
@@ -58,7 +67,11 @@ export function registerIpcHandlers(options: IpcHandlerOptions = {}): void {
   ipcMain.handle(CH.PING, () => "pong");
 
   // Profiles
-  ipcMain.handle(CH.PROFILE_GET, (_e, userId: string) => getProfile(userId));
+  ipcMain.handle(CH.PROFILE_GET, async (_e, userId: string) => {
+    const profile = await getProfile(userId);
+    if (profile?.username) setCurrentUsername(profile.username);
+    return profile;
+  });
   ipcMain.handle(CH.PROFILE_UPDATE, (_e, userId, updates) =>
     updateProfile(userId, updates),
   );
@@ -98,23 +111,34 @@ export function registerIpcHandlers(options: IpcHandlerOptions = {}): void {
     }
   });
 
+  // ElevenLabs voice settings
+  ipcMain.handle(CH.ELEVENLABS_SETTINGS_GET, () => getElevenLabsSettings());
+  ipcMain.handle(CH.ELEVENLABS_SETTINGS_SET, (_e, settings: ElevenLabsSettings) => {
+    saveElevenLabsSettings(settings);
+  });
+  ipcMain.handle(CH.ELEVENLABS_TEST, (_e, settings?: Partial<ElevenLabsSettings>) => testVoice(settings));
+
   // Cohorts
   ipcMain.handle(CH.COHORTS_LIST, (_e, userId) => getCohorts(userId));
   ipcMain.handle(CH.COHORT_CREATE, (_e, userId, name) =>
     createCohort(userId, name),
   );
-  ipcMain.handle(CH.COHORT_JOIN, (_e, userId, inviteCode) =>
-    joinCohort(userId, inviteCode),
-  );
+  ipcMain.handle(CH.COHORT_JOIN, async (_e, userId, inviteCode) => {
+    const cohort = await joinCohort(userId, inviteCode);
+    if (cohort) void triggerVoiceEvent('cohort_member_join', { memberName: `you` });
+    return cohort;
+  });
   ipcMain.handle(CH.COHORT_SHARED_PROFILES, (_e, userId) =>
     getSharedCohortProfiles(userId),
   );
   ipcMain.handle(CH.COHORT_MEMBERS, (_e, cohortId) =>
     getCohortMembers(cohortId),
   );
-  ipcMain.handle(CH.COHORT_LEAVE, (_e, userId, cohortId) =>
-    leaveCohort(userId, cohortId),
-  );
+  ipcMain.handle(CH.COHORT_LEAVE, async (_e, userId, cohortId) => {
+    const ok = await leaveCohort(userId, cohortId);
+    if (ok) void triggerVoiceEvent('cohort_member_leave', { memberName: 'you' });
+    return ok;
+  });
 
   // Pause session
   ipcMain.handle("pause-session", () => {
@@ -157,9 +181,11 @@ export function registerIpcHandlers(options: IpcHandlerOptions = {}): void {
     const sessionId = getActiveSessionId();
     if (!sessionId) return;
     const metrics = finishSessionMetrics(sessionId);
-    await endSession(sessionId, pauseMinutes, metrics ? calculateFlowScore(metrics) : flowScore, aiSummary, undefined, metrics ?? undefined);
+    const history = pendingConversationHistory;
+    pendingConversationHistory = undefined;
+    await endSession(sessionId, pauseMinutes, metrics ? calculateFlowScore(metrics) : flowScore, aiSummary, history, metrics ?? undefined);
     setActiveSessionId(null);
-    sendHardwareSerialCommand('O');
+    void triggerVoiceEvent('session_end');
   });
 
   ipcMain.handle(CH.SESSION_HISTORY, (_e, userId) =>
@@ -271,22 +297,30 @@ export function registerIpcHandlers(options: IpcHandlerOptions = {}): void {
     return session?.id ?? null;
   });
 
+  ipcMain.handle('save-conversation-history', (_e, history: unknown[]) => {
+    pendingConversationHistory = Array.isArray(history) && history.length > 0 ? history : undefined;
+  });
+
   ipcMain.handle('end-session', async (_e, { sessionId, flowScore, conversationHistory }: { sessionId: string; flowScore: number | null; conversationHistory: unknown[] }) => {
     if (!sessionId) return;
     const userId = getOverlayUserId();
     const metrics = finishSessionMetrics(sessionId);
+    const history = Array.isArray(conversationHistory) && conversationHistory.length > 0
+      ? conversationHistory
+      : pendingConversationHistory;
+    pendingConversationHistory = undefined;
     await endSession(
       sessionId,
       0,
       metrics ? calculateFlowScore(metrics) : flowScore ?? 0,
       '',
-      conversationHistory,
+      history,
       metrics ?? undefined,
     );
     if (userId) await updateProfile(userId, { hardware_status: 'offline' });
     setActiveSessionId(null);
     resetPauseStats();
-    sendHardwareSerialCommand('O');
+    void triggerVoiceEvent('session_end');
     for (const win of BrowserWindow.getAllWindows()) {
       win.webContents.send('mqtt:own-state', { status: 'offline' });
     }
@@ -304,7 +338,8 @@ export function registerIpcHandlers(options: IpcHandlerOptions = {}): void {
     const userId = getOverlayUserId();
     if (!userId) return;
     recordFocusState(state);
-    sendFocusStateToHardwareSerial(state);
+    if (state === 'idle') void triggerVoiceEvent('idle');
+    else if (state === 'distracted') void triggerVoiceEvent('distracted');
     return updateProfile(userId, {
       focus_state: state as 'productive' | 'distracted' | 'idle' | 'offline',
     });
