@@ -16,6 +16,12 @@ Ollama must be running on this computer.
 Optional check:
 curl http://127.0.0.1:11434/v1/models
 
+The dashboard text agent needs a text model installed. For example:
+ollama pull gemma3:4b
+
+The vision classifier is separate and uses LOCAL_VLM_MODEL, usually:
+ollama pull moondream
+
 
 STEP 2 - Make sure the named Cloudflare tunnel config has both routes
 
@@ -67,8 +73,11 @@ STEP 6 - Use the stable app config
 The host computer and any normal user can use:
 
 GEMMA_BASE_URL=https://ollama.handy-control.com
-GEMMA_MODEL=gemma4:latest
+GEMMA_MODEL=gemma3:4b
 GEMMA_BEARER=1x2NPB6yQtGGIfgTLLztdLBoJ9tWiMp3OYr_kOK0B7g
+
+LOCAL_VLM_URL=http://127.0.0.1:11434/api/chat
+LOCAL_VLM_MODEL=moondream
 
 
 SECTION 2 - IF YOU ARE A NORMAL USER PULLING THE REPO
@@ -92,12 +101,19 @@ STEP 3 - Use the shared model endpoint in .env
 Your .env should contain:
 
 GEMMA_BASE_URL=https://ollama.handy-control.com
-GEMMA_MODEL=gemma4:latest
+GEMMA_MODEL=gemma3:4b
 GEMMA_BEARER=1x2NPB6yQtGGIfgTLLztdLBoJ9tWiMp3OYr_kOK0B7g
+
+LOCAL_VLM_URL=http://127.0.0.1:11434/api/chat
+LOCAL_VLM_MODEL=moondream
 
 You do not need to install Ollama.
 You do not need to run cloudflared.
 You do not need to run npm run ollama:proxy.
+
+GEMMA_* is for dashboard text summaries.
+LOCAL_VLM_* is for screen/vision classification.
+Do not use the Gemma text model for the vision classifier.
 
 
 STEP 4 - Run the app
