@@ -19,8 +19,8 @@
 #define COHORT_WORKFLOW_GROUP "Focus Session"
 #endif
 
-#ifndef D6
-#define D6 6
+#ifndef D2
+#define D2 2
 #endif
 #ifndef D11
 #define D11 11
@@ -46,9 +46,9 @@ constexpr uint8_t AUDIO_COHORT_JOINED = 6;
 constexpr uint8_t AUDIO_COHORT_LEFT = 7;
 
 // ---------------- PINS ----------------
-const uint8_t buttonPins[] = { 9 };
+const uint8_t buttonPins[] = { D2 };
 const uint8_t buttonPinCount = sizeof(buttonPins) / sizeof(buttonPins[0]);
-#define LED_PIN 5
+#define LED_PIN 9
 #define NUM_LEDS 24
 
 Adafruit_NeoPixel strip(NUM_LEDS, LED_PIN, NEO_GRB + NEO_KHZ800);
@@ -302,6 +302,8 @@ void beginShutdown() {
 // ---------------- SETUP ----------------
 void setup() {
   Serial.begin(9600);
+  delay(250);
+  Serial.println("BOOT:COHORT_ORB");
   dfSerial.begin(9600, SERIAL_8N1, PIN_MP3_RX, PIN_MP3_TX);
 
   for (uint8_t i = 0; i < buttonPinCount; i++) {

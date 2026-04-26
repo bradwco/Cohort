@@ -110,8 +110,8 @@ The firmware echoes each command as `SERIAL:<EVENT_NAME>` and also prints state 
 
 ## Default pin map
 
-- `GPIO 9` - capacitive sensor input, active-high by default
-- `GPIO 5` - WS2812B / NeoPixel data
+- `D2` - capacitive sensor input, active-high by default
+- `GPIO 9` - WS2812B / NeoPixel data
 - `D11` - DFPlayer RX
 - `D12` - DFPlayer TX
 
