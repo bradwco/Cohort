@@ -33,13 +33,6 @@ type DBSession = {
   flow_score?: number;
 };
 
-const GEMMA_INSIGHTS = [
-  'Your best sessions start before 10 PM. You average 94 flow on night sessions vs 78 in the afternoon.',
-  'You lift your phone most in the first 20 minutes. Try a hard start ritual to lock in faster.',
-  'Sessions over 60 minutes have 30% better flow scores than shorter ones. You go deep.',
-  "You haven't had a failed session in 5 days. The streak is working.",
-];
-
 function computeStreak(sessions: DBSession[]): number {
   if (sessions.length === 0) return 0;
   const dates = new Set(sessions.map((s) => new Date(s.started_at).toLocaleDateString()));
@@ -86,6 +79,11 @@ type Props = {
   onEndSession: () => void;
 };
 
+type AgentResponse = {
+  text?: string;
+  error?: string;
+};
+
 export function DashboardView({
   userId,
   profile,
@@ -111,9 +109,10 @@ export function DashboardView({
   const [friends, setFriends] = useState<ProfileRow[]>([]);
   const [liveStates, setLiveStates] = useState<Map<string, LiveState>>(new Map());
   const [, setNowTick] = useState(Date.now());
+  const [agentInsight, setAgentInsight] = useState('Complete your first session to receive a personalized insight.');
+  const [insightLoading, setInsightLoading] = useState(false);
 
   const streak = computeStreak(sessions);
-  const insight = GEMMA_INSIGHTS[sessions.length % GEMMA_INSIGHTS.length] ?? GEMMA_INSIGHTS[0];
   const orbColor = isPaused ? '#7CB0E8'
     : orbStatus === 'docked' ? '#E8A87C'
     : orbStatus === 'undocked' ? '#7CB0E8'
@@ -162,6 +161,63 @@ export function DashboardView({
     });
     return () => { cleanup(); };
   }, []);
+
+  useEffect(() => {
+    if (!userId || !window.api) {
+      setInsightLoading(false);
+      setAgentInsight('Sign in to receive personalized dashboard insights.');
+      return;
+    }
+
+    let cancelled = false;
+    setInsightLoading(true);
+
+    void window.api.queryAgent({
+      intent: 'dashboard_insight',
+      userId,
+      context: {
+        session_active: sessionActive,
+        current_workflow: currentWorkflow || null,
+        lift_count: liftCount,
+        total_pause_minutes: Math.floor(totalPauseMs / 60000),
+        planned_duration_minutes: profile.sessionLength,
+        recent_session_count: sessions.length,
+        streak_days: streak,
+      },
+    }).then((response) => {
+      if (cancelled) return;
+      const data = response as AgentResponse;
+      const text = data.text?.trim();
+      if (text) {
+        setAgentInsight(text);
+        return;
+      }
+      if (sessions.length === 0) {
+        setAgentInsight('Complete your first session to receive a personalized insight.');
+        return;
+      }
+      setAgentInsight(data.error ? `agent unavailable: ${data.error}` : 'agent unavailable');
+    }).catch((error) => {
+      if (cancelled) return;
+      const message = error instanceof Error ? error.message : String(error);
+      setAgentInsight(`agent unavailable: ${message}`);
+    }).finally(() => {
+      if (!cancelled) setInsightLoading(false);
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    currentWorkflow,
+    liftCount,
+    profile.sessionLength,
+    sessionActive,
+    sessions.length,
+    streak,
+    totalPauseMs,
+    userId,
+  ]);
 
   const activeFriends = friends.filter((f) => {
     const live = liveStates.get(f.id);
@@ -312,9 +368,7 @@ export function DashboardView({
               </span>
             </div>
             <div className="font-serif text-sm italic leading-relaxed text-ink-dim">
-              {sessions.length === 0
-                ? 'Complete your first session to receive a personalized insight.'
-                : insight}
+              {insightLoading ? 'asking gemma...' : agentInsight}
             </div>
           </div>
         </div>

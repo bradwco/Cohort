@@ -28,6 +28,9 @@ export const CH = {
   SESSION_END: 'supabase:session-end',
   SESSION_HISTORY: 'supabase:session-history',
 
+  // Agent
+  AGENT_QUERY: 'agent:query',
+
   // Supabase - activity logs
   ACTIVITY_LOG: 'supabase:activity-log',
   ACTIVITY_LOGS_GET: 'supabase:activity-logs-get',
