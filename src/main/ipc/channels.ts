@@ -9,8 +9,17 @@ export const CH = {
   // Supabase - friends
   FRIENDS_LIST: 'supabase:friends-list',
   FRIEND_ADD: 'supabase:friend-add',
+  FRIEND_REQUESTS_LIST: 'supabase:friend-requests-list',
+  FRIEND_REQUEST_SEND: 'supabase:friend-request-send',
+  FRIEND_REQUEST_ACCEPT: 'supabase:friend-request-accept',
   PROFILE_SEARCH: 'supabase:profile-search',
   FRIEND_NUDGE_SEND: 'friends:nudge-send',
+
+  // Supabase - cohorts
+  COHORTS_LIST: 'supabase:cohorts-list',
+  COHORT_CREATE: 'supabase:cohort-create',
+  COHORT_JOIN: 'supabase:cohort-join',
+  COHORT_SHARED_PROFILES: 'supabase:cohort-shared-profiles',
 
   // Supabase - sessions
   SESSION_START: 'supabase:session-start',

@@ -9,6 +9,13 @@ import {
   getFriendsWithProfiles,
   searchProfileByUsername,
   addFriend,
+  getFriendRequests,
+  sendFriendRequest,
+  acceptFriendRequest,
+  getCohorts,
+  createCohort,
+  joinCohort,
+  getSharedCohortProfiles,
   startSession,
   endSession,
   getSessionHistory,
@@ -39,12 +46,21 @@ export function registerIpcHandlers(): void {
   ipcMain.handle(CH.FRIENDS_LIST, (_e, userId: string) => getFriendsWithProfiles(userId));
   ipcMain.handle(CH.PROFILE_SEARCH, (_e, username: string) => searchProfileByUsername(username));
   ipcMain.handle(CH.FRIEND_ADD, (_e, userId: string, friendId: string) => addFriend(userId, friendId));
+  ipcMain.handle(CH.FRIEND_REQUESTS_LIST, (_e, userId: string) => getFriendRequests(userId));
+  ipcMain.handle(CH.FRIEND_REQUEST_SEND, (_e, requesterId: string, receiverId: string) => sendFriendRequest(requesterId, receiverId));
+  ipcMain.handle(CH.FRIEND_REQUEST_ACCEPT, (_e, userId: string, requestId: string) => acceptFriendRequest(userId, requestId));
   ipcMain.handle(CH.FRIEND_NUDGE_SEND, (_e, fromUserId: string, toUserId: string, fromName: string) => {
     const payload = { fromUserId, toUserId, fromName, sentAt: new Date().toISOString() };
     for (const win of BrowserWindow.getAllWindows()) {
       win.webContents.send(PUSH.FRIEND_NUDGE, payload);
     }
   });
+
+  // Cohorts
+  ipcMain.handle(CH.COHORTS_LIST, (_e, userId: string) => getCohorts(userId));
+  ipcMain.handle(CH.COHORT_CREATE, (_e, userId: string, name: string) => createCohort(userId, name));
+  ipcMain.handle(CH.COHORT_JOIN, (_e, userId: string, inviteCode: string) => joinCohort(userId, inviteCode));
+  ipcMain.handle(CH.COHORT_SHARED_PROFILES, (_e, userId: string) => getSharedCohortProfiles(userId));
 
   // Sessions
   ipcMain.handle(

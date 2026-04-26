@@ -190,13 +190,9 @@ export function DeskMap({ userId, fmt }: Props) {
     if (!userId || !searchResult || searchResult === 'not-found' || searchResult === 'searching') return;
 
     setAddStatus('adding');
-    const ok = await window.api.addFriend(userId, (searchResult as ProfileRow).id);
+    const request = await window.api.sendFriendRequest(userId, (searchResult as ProfileRow).id);
 
-    if (ok) {
-      setProfiles((prev) => {
-        if (prev.some((p) => p.id === (searchResult as ProfileRow).id)) return prev;
-        return [...prev, searchResult as ProfileRow];
-      });
+    if (request) {
       setAddStatus('done');
       setSearchInput('');
       setSearchResult(null);
@@ -261,7 +257,7 @@ export function DeskMap({ userId, fmt }: Props) {
               <div>
                 <span className="font-mono text-[11px] text-ink">@{(searchResult as ProfileRow).username}</span>
                 {addStatus === 'error' && (
-                  <span className="ml-2 font-mono text-[9px] text-red-400">already friends?</span>
+                  <span className="ml-2 font-mono text-[9px] text-red-400">same cohort required</span>
                 )}
               </div>
               <button
@@ -269,7 +265,7 @@ export function DeskMap({ userId, fmt }: Props) {
                 disabled={addStatus === 'adding' || addStatus === 'done'}
                 className="rounded border border-amber/40 bg-amber/10 px-2.5 py-1 font-mono text-[10px] text-amber transition-opacity disabled:opacity-50"
               >
-                {addStatus === 'adding' ? 'adding...' : addStatus === 'done' ? 'added' : '+ add'}
+                {addStatus === 'adding' ? 'sending...' : addStatus === 'done' ? 'sent' : 'request'}
               </button>
             </div>
           )}

@@ -11,8 +11,19 @@ const api = {
   getFriends: (userId: string) => ipcRenderer.invoke(CH.FRIENDS_LIST, userId),
   searchProfile: (username: string) => ipcRenderer.invoke(CH.PROFILE_SEARCH, username),
   addFriend: (userId: string, friendId: string) => ipcRenderer.invoke(CH.FRIEND_ADD, userId, friendId),
+  getFriendRequests: (userId: string) => ipcRenderer.invoke(CH.FRIEND_REQUESTS_LIST, userId),
+  sendFriendRequest: (requesterId: string, receiverId: string) =>
+    ipcRenderer.invoke(CH.FRIEND_REQUEST_SEND, requesterId, receiverId),
+  acceptFriendRequest: (userId: string, requestId: string) =>
+    ipcRenderer.invoke(CH.FRIEND_REQUEST_ACCEPT, userId, requestId),
   sendFriendNudge: (fromUserId: string, toUserId: string, fromName: string) =>
     ipcRenderer.invoke(CH.FRIEND_NUDGE_SEND, fromUserId, toUserId, fromName),
+
+  // Cohorts
+  getCohorts: (userId: string) => ipcRenderer.invoke(CH.COHORTS_LIST, userId),
+  createCohort: (userId: string, name: string) => ipcRenderer.invoke(CH.COHORT_CREATE, userId, name),
+  joinCohort: (userId: string, inviteCode: string) => ipcRenderer.invoke(CH.COHORT_JOIN, userId, inviteCode),
+  getSharedCohortProfiles: (userId: string) => ipcRenderer.invoke(CH.COHORT_SHARED_PROFILES, userId),
 
   // Sessions
   startSession: (userId: string, workflowGroup: string, durationMins: number) =>
