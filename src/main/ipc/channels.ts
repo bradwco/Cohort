@@ -14,6 +14,7 @@ export const CH = {
   FRIEND_REQUEST_ACCEPT: 'supabase:friend-request-accept',
   PROFILE_SEARCH: 'supabase:profile-search',
   FRIEND_NUDGE_SEND: 'friends:nudge-send',
+  FRIEND_REMOVE: 'supabase:friend-remove',
 
   // Supabase - cohorts
   COHORTS_LIST: 'supabase:cohorts-list',

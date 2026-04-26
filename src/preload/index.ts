@@ -16,6 +16,8 @@ const api = {
     ipcRenderer.invoke(CH.FRIEND_REQUEST_SEND, requesterId, receiverId),
   acceptFriendRequest: (userId: string, requestId: string) =>
     ipcRenderer.invoke(CH.FRIEND_REQUEST_ACCEPT, userId, requestId),
+  removeFriend: (userId: string, friendId: string) =>
+    ipcRenderer.invoke(CH.FRIEND_REMOVE, userId, friendId),
   sendFriendNudge: (fromUserId: string, toUserId: string, fromName: string) =>
     ipcRenderer.invoke(CH.FRIEND_NUDGE_SEND, fromUserId, toUserId, fromName),
 

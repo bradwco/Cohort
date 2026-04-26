@@ -1,8 +1,17 @@
-import { BrowserWindow, shell } from 'electron';
+import { BrowserWindow, shell, nativeImage } from 'electron';
 import { join } from 'node:path';
+import { existsSync } from 'node:fs';
+
+function loadAppIcon() {
+  const iconPath = join(__dirname, '../../resources/icon.ico');
+  if (existsSync(iconPath)) return nativeImage.createFromPath(iconPath);
+  return undefined;
+}
 
 export function createMainWindow(): BrowserWindow {
+  const icon = loadAppIcon();
   const win = new BrowserWindow({
+    ...(icon ? { icon } : {}),
     width: 1400,
     height: 900,
     minWidth: 1100,

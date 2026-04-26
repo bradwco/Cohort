@@ -206,6 +206,29 @@ export async function acceptFriendRequest(userId: string, requestId: string): Pr
   return true;
 }
 
+export async function removeFriend(userId: string, friendId: string): Promise<boolean> {
+  const db = getSupabaseClient();
+  const [{ data: userRow, error: e1 }, { data: friendRow, error: e2 }] = await Promise.all([
+    db.from('friendships').select('friend_ids').eq('user_id', userId).single(),
+    db.from('friendships').select('friend_ids').eq('user_id', friendId).single(),
+  ]);
+  if (e1 || e2) {
+    console.error('removeFriend fetch:', e1?.message ?? e2?.message);
+    return false;
+  }
+  const userFriends = ((userRow as Friendship)?.friend_ids ?? []).filter((id) => id !== friendId);
+  const friendFriends = ((friendRow as Friendship)?.friend_ids ?? []).filter((id) => id !== userId);
+  const [{ error: ue }, { error: fe }] = await Promise.all([
+    db.from('friendships').update({ friend_ids: userFriends }).eq('user_id', userId),
+    db.from('friendships').update({ friend_ids: friendFriends }).eq('user_id', friendId),
+  ]);
+  if (ue || fe) {
+    console.error('removeFriend update:', ue?.message ?? fe?.message);
+    return false;
+  }
+  return true;
+}
+
 export async function getFriendsWithProfiles(userId: string): Promise<Profile[]> {
   const db = getSupabaseClient();
   const { data, error } = await db

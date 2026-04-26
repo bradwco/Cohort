@@ -130,6 +130,8 @@ export function FriendsView({ userId }: Props) {
   const [friendRequests, setFriendRequests] = useState<FriendRequestRow[]>([]);
   const [sharedCohortProfiles, setSharedCohortProfiles] = useState<ProfileRow[]>([]);
 
+  const [removingFriendId, setRemovingFriendId] = useState<string | null>(null);
+
   const [searchInput, setSearchInput] = useState('');
   const [searchResult, setSearchResult] = useState<ProfileRow | null | 'not-found' | 'searching'>(null);
   const [addStatus, setAddStatus] = useState<'idle' | 'adding' | 'done' | 'error'>('idle');
@@ -249,6 +251,16 @@ export function FriendsView({ userId }: Props) {
       const rows = await window.api.getFriends(userId);
       setProfiles((rows as ProfileRow[]) ?? []);
     }
+  }
+
+  async function handleRemoveFriend(friendId: string) {
+    if (!userId || !window.api) return;
+    setRemovingFriendId(friendId);
+    const ok = await window.api.removeFriend(userId, friendId);
+    if (ok) {
+      setProfiles((prev) => prev.filter((p) => p.id !== friendId));
+    }
+    setRemovingFriendId(null);
   }
 
   async function handleNudge(friendId: string, friendUsername: string) {
@@ -440,6 +452,14 @@ export function FriendsView({ userId }: Props) {
                       nudge
                     </button>
                   )}
+                  <button
+                    type="button"
+                    onClick={() => void handleRemoveFriend(p.id)}
+                    disabled={removingFriendId === p.id}
+                    className="rounded border border-line px-2 py-0.5 font-mono text-[9px] text-ink-faint transition-colors hover:border-red-500/40 hover:text-red-400 disabled:opacity-40"
+                  >
+                    {removingFriendId === p.id ? '...' : 'remove'}
+                  </button>
                 </div>
               </div>
             );
@@ -810,7 +830,7 @@ export function FriendsView({ userId }: Props) {
       )}
 
       {activeTab === 'social' && (
-        <div className="mx-auto flex w-full max-w-3xl flex-col gap-5">
+        <div className="flex w-full flex-col gap-5">
           {pendingRequestsBlock}
           {searchBlock}
           {sameCohortBlock}

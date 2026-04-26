@@ -9,6 +9,7 @@ import {
   getFriendsWithProfiles,
   searchProfileByUsername,
   addFriend,
+  removeFriend,
   getFriendRequests,
   sendFriendRequest,
   acceptFriendRequest,
@@ -79,6 +80,9 @@ export function registerIpcHandlers(options: IpcHandlerOptions = {}): void {
   );
   ipcMain.handle(CH.FRIEND_REQUEST_ACCEPT, (_e, userId, requestId) =>
     acceptFriendRequest(userId, requestId),
+  );
+  ipcMain.handle(CH.FRIEND_REMOVE, (_e, userId, friendId) =>
+    removeFriend(userId, friendId),
   );
 
   ipcMain.handle(CH.FRIEND_NUDGE_SEND, (_e, fromUserId, toUserId, fromName) => {
