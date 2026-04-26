@@ -1,0 +1,124 @@
+COHORT OLLAMA + CLOUDFLARE TUNNEL SETUP
+
+Stable model URL:
+https://ollama.handy-control.com
+
+
+SECTION 1 - IF YOU ARE THE HOST SETTING UP CLOUDFLARE
+
+Use this section only on the computer that is running Ollama.
+
+
+STEP 1 - Make sure Ollama is running
+
+Ollama must be running on this computer.
+
+Optional check:
+curl http://127.0.0.1:11434/v1/models
+
+
+STEP 2 - Make sure the named Cloudflare tunnel config has both routes
+
+Open:
+C:\Users\bradc\.cloudflared\config.yml
+
+It should include:
+
+ingress:
+  - hostname: handy-control.com
+    service: http://localhost:8000
+  - hostname: ollama.handy-control.com
+    service: http://localhost:8787
+  - service: http_status:404
+
+This keeps handy-control.com working and adds ollama.handy-control.com for Cohort.
+
+
+STEP 3 - Create the DNS route once
+
+Only run this once, or if the DNS route gets deleted:
+
+cloudflared tunnel route dns bradwcopc ollama.handy-control.com
+
+
+STEP 4 - Start the local authenticated Ollama proxy
+
+Open a terminal in this repo:
+C:\Users\bradc\Documents\Cohort
+
+Run:
+npm run ollama:proxy
+
+Keep this terminal open.
+
+
+STEP 5 - Start the named Cloudflare tunnel
+
+Open a second terminal.
+
+Run:
+cloudflared tunnel run bradwcopc
+
+Keep this terminal open.
+
+
+STEP 6 - Use the stable app config
+
+The host computer and any normal user can use:
+
+GEMMA_BASE_URL=https://ollama.handy-control.com
+GEMMA_MODEL=gemma4:latest
+GEMMA_BEARER=1x2NPB6yQtGGIfgTLLztdLBoJ9tWiMp3OYr_kOK0B7g
+
+
+SECTION 2 - IF YOU ARE A NORMAL USER PULLING THE REPO
+
+Use this section if you are not hosting Ollama and just want to run the app.
+
+
+STEP 1 - Pull the repo
+
+Clone or pull the latest Cohort repo.
+
+
+STEP 2 - Install dependencies
+
+Run:
+npm install
+
+
+STEP 3 - Use the shared model endpoint in .env
+
+Your .env should contain:
+
+GEMMA_BASE_URL=https://ollama.handy-control.com
+GEMMA_MODEL=gemma4:latest
+GEMMA_BEARER=1x2NPB6yQtGGIfgTLLztdLBoJ9tWiMp3OYr_kOK0B7g
+
+You do not need to install Ollama.
+You do not need to run cloudflared.
+You do not need to run npm run ollama:proxy.
+
+
+STEP 4 - Run the app
+
+Run:
+npm run dev
+
+
+TROUBLESHOOTING
+
+If the app says the agent is unavailable:
+
+1. The host computer may not have Ollama running.
+2. The host computer may not have npm run ollama:proxy running.
+3. The host computer may not have cloudflared tunnel run bradwcopc running.
+4. The model name may not match the model installed on the host.
+5. The bearer token in .env may not match OLLAMA_PROXY_BEARER on the host.
+
+
+SECURITY NOTES
+
+- Do not expose raw Ollama directly to the internet.
+- The public endpoint should go through the local proxy on port 8787.
+- If the bearer token leaks, generate a new one and update .env for everyone.
