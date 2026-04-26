@@ -159,6 +159,7 @@ export async function triggerVoiceEvent(
   const text = buildMessage(event, { username: currentUsername, workflowGroup: ctx.workflowGroup, memberName });
   const result = await generateSpeech(text, settings);
   if ('buffer' in result) broadcastAudio(result.buffer);
+  else console.error('[ElevenLabs] voice event failed:', result.error);
 }
 
 export async function testVoice(settingsOverride?: Partial<ElevenLabsSettings>, text?: string): Promise<boolean> {
