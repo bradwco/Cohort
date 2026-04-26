@@ -103,6 +103,19 @@ export function HwSimulator({
     }
   }, [activeGroup, initialDuration, userId, users]);
 
+  useEffect(() => {
+    if (!window.api) return;
+    const cleanup = window.api.onOwnState((raw) => {
+      const data = raw as { status?: string };
+      if (data.status === 'offline') {
+        setStatus('offline');
+        setSessionStartedAt(null);
+        setSessionDuration(initialDuration);
+      }
+    });
+    return () => { cleanup(); };
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
   function push(msg: string) {
     setLog((l) => [`${new Date().toLocaleTimeString()} ${msg}`, ...l.slice(0, 6)]);
   }
