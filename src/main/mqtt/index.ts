@@ -2,6 +2,7 @@ import mqtt, { MqttClient } from 'mqtt';
 import { BrowserWindow } from 'electron';
 import { updateProfile, startSession, logActivity } from '../supabase';
 import { recordPhoneLift, startSessionMetrics } from '../session_metrics';
+import { triggerVoiceEvent } from '../elevenlabs';
 
 type OrbPayload = {
   status?: 'docked' | 'undocked' | 'redocked' | 'offline';
@@ -26,6 +27,9 @@ const simulatedFriendPauses = new Map<string, { pauseStart: number | null; total
 
 let onDockedCallback: (() => void) | null = null;
 let onOfflineCallback: (() => void) | null = null;
+
+// Track friend statuses to detect join/leave events
+const friendStatuses = new Map<string, string>();
 
 export function setDockedCallback(cb: () => void): void { onDockedCallback = cb; }
 export function setOfflineCallback(cb: () => void): void { onOfflineCallback = cb; }
@@ -157,7 +161,16 @@ async function handleIncoming(topic: string, raw: string): Promise<void> {
 
   const friendMatch = topic.match(/^focus-orb\/(.+)\/state$/);
   if (friendMatch) {
-    broadcastToRenderer('mqtt:friend-state', { userId: friendMatch[1], ...payload });
+    const friendId = friendMatch[1];
+    const prev = friendStatuses.get(friendId);
+    const next = payload.status ?? '';
+    if (prev !== 'docked' && next === 'docked') {
+      void triggerVoiceEvent('cohort_member_join', { memberUserId: friendId });
+    } else if (prev === 'docked' && next === 'offline') {
+      void triggerVoiceEvent('cohort_member_leave', { memberUserId: friendId });
+    }
+    friendStatuses.set(friendId, next);
+    broadcastToRenderer('mqtt:friend-state', { userId: friendId, ...payload });
   }
 }
 
@@ -199,6 +212,7 @@ async function handleOwnOrbState(payload: OrbPayload): Promise<void> {
     broadcastToRenderer('mqtt:own-state', ownPayload);
     publishOwnState({ ...ownPayload, origin: 'desktop-sim' });
     onDockedCallback?.();
+    void triggerVoiceEvent('session_start', { workflowGroup });
     return;
   }
 
@@ -222,6 +236,7 @@ async function handleOwnOrbState(payload: OrbPayload): Promise<void> {
     };
     broadcastToRenderer('mqtt:own-state', ownPayload);
     publishOwnState({ ...ownPayload, origin: 'desktop-sim' });
+    void triggerVoiceEvent('phone_lift');
     return;
   }
 
@@ -240,6 +255,7 @@ async function handleOwnOrbState(payload: OrbPayload): Promise<void> {
     broadcastToRenderer('mqtt:own-state', ownPayload);
     publishOwnState({ ...ownPayload, origin: 'desktop-sim' });
     onDockedCallback?.();
+    void triggerVoiceEvent('phone_redock');
     return;
   }
 
