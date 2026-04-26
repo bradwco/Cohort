@@ -45,7 +45,7 @@ interface OpenAiResponse {
 // 30s is plenty for a healthy Gemma response and fails fast when the
 // backend is unreachable, instead of stacking 2-minute aborts in the
 // console while the dashboard insight effect re-fires.
-const REQUEST_TIMEOUT_MS = 30_000;
+const REQUEST_TIMEOUT_MS = 90_000;
 
 function buildChatUrl(baseUrl: string): string {
   const trimmed = baseUrl.replace(/\/$/, "");
