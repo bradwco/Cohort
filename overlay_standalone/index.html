@@ -73,15 +73,23 @@
     <script src="ai/gemini.js"></script>
     <script src="ai/classifier.js"></script>
     <script>
-      // ── Timer ──────────────────────────────────────────────────────────
-      let secs = 25 * 60;
+      // ── Timer (stopwatch) ──────────────────────────────────────────────
+      let secsElapsed = 0;
+      let goalSecs = 50 * 60; // default 50 min, updated from config
+      let goalReached = false;
       const timerEl = document.getElementById('timer');
+      timerEl.textContent = '00:00';
+
       const tick = setInterval(() => {
-        secs = Math.max(0, secs - 1);
+        secsElapsed++;
         timerEl.textContent =
-          String(Math.floor(secs / 60)).padStart(2, '0') + ':' +
-          String(secs % 60).padStart(2, '0');
-        if (secs === 0) clearInterval(tick);
+          String(Math.floor(secsElapsed / 60)).padStart(2, '0') + ':' +
+          String(secsElapsed % 60).padStart(2, '0');
+        if (!goalReached && secsElapsed >= goalSecs) {
+          goalReached = true;
+          timerEl.style.color = 'var(--accent)';
+          timerEl.title = 'Session goal reached!';
+        }
       }, 1000);
 
       let sessionId = null;
@@ -89,12 +97,15 @@
       (async () => {
         try {
           const cfg = await window.electronAPI.getConfig();
+          if (cfg.PLANNED_DURATION_MINUTES) {
+            goalSecs = cfg.PLANNED_DURATION_MINUTES * 60;
+          }
           if (cfg.SESSION_ID) {
             sessionId = cfg.SESSION_ID;
             console.log('[session] using existing:', sessionId);
           } else {
             sessionId = await window.electronAPI.createSession({
-              plannedDurationMinutes: Math.round(secs / 60),
+              plannedDurationMinutes: cfg.PLANNED_DURATION_MINUTES || 50,
               workflowGroup: 'Focus Session',
             });
             console.log('[session] created:', sessionId);
@@ -221,16 +232,9 @@
 
       document.getElementById('stop').addEventListener('click', async () => {
         try {
-          if (sessionId) {
-            const score = focusSmoother ? +(focusSmoother.state().productiveRatio * 10).toFixed(1) : null;
-            await window.electronAPI.endSession({
-              sessionId,
-              flowScore: score,
-              conversationHistory: gemini?.history ?? [],
-            });
-          }
+          await window.electronAPI.pauseSession();
         } catch (e) {
-          console.warn('[session] failed to end:', e.message);
+          console.warn('[session] pause failed:', e.message);
         } finally {
           window.close();
         }

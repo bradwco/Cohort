@@ -75,25 +75,34 @@ function formatElapsed(startedAt?: string): string {
 type Props = {
   userId: string | null;
   profile: OnboardingData;
-  secondsLeft: number;
+  secondsElapsed: number;
   fmt: (s: number) => string;
   orbStatus: OrbStatus;
   liftCount: number;
   totalPauseMs: number;
   currentWorkflow: string;
+  sessionPausedAt: string | null;
+  pauseBudgetMinutes: number;
+  onEndSession: () => void;
 };
 
 export function DashboardView({
   userId,
   profile,
-  secondsLeft,
+  secondsElapsed,
   fmt,
   orbStatus,
   liftCount,
   totalPauseMs,
   currentWorkflow,
+  sessionPausedAt,
+  pauseBudgetMinutes,
+  onEndSession,
 }: Props) {
   const sessionActive = orbStatus !== 'offline';
+  const isPaused = sessionActive && sessionPausedAt !== null;
+  const goalSecs = profile.sessionLength * 60;
+  const goalReached = sessionActive && secondsElapsed >= goalSecs;
   const flowScore = sessionActive
     ? computeFlowScore(liftCount, totalPauseMs, profile.sessionLength)
     : null;
@@ -105,8 +114,10 @@ export function DashboardView({
 
   const streak = computeStreak(sessions);
   const insight = GEMMA_INSIGHTS[sessions.length % GEMMA_INSIGHTS.length] ?? GEMMA_INSIGHTS[0];
-  const orbColor =
-    orbStatus === 'docked' ? '#E8A87C' : orbStatus === 'undocked' ? '#7CB0E8' : '#3a3d4a';
+  const orbColor = isPaused ? '#7CB0E8'
+    : orbStatus === 'docked' ? '#E8A87C'
+    : orbStatus === 'undocked' ? '#7CB0E8'
+    : '#3a3d4a';
 
   useEffect(() => {
     if (!userId || !window.api) return;
@@ -124,7 +135,7 @@ export function DashboardView({
   }, [userId]);
 
   useEffect(() => {
-    const id = window.setInterval(() => setNowTick(Date.now()), 30000);
+    const id = window.setInterval(() => setNowTick(Date.now()), 1000);
     return () => window.clearInterval(id);
   }, []);
 
@@ -165,24 +176,39 @@ export function DashboardView({
 
           <div className="mt-8 font-mono text-[10px] uppercase tracking-[0.24em] text-ink-faint">
             {sessionActive
-              ? orbStatus === 'undocked'
-                ? 'paused - phone lifted'
-                : `focused - ${currentWorkflow || 'session active'}`
+              ? isPaused
+                ? 'session paused'
+                : orbStatus === 'undocked'
+                  ? 'paused — phone lifted'
+                  : goalReached
+                    ? `goal reached — ${currentWorkflow || 'keep going'}`
+                    : `focused — ${currentWorkflow || 'session active'}`
               : 'waiting for hardware'}
           </div>
 
           <div
             className={cn(
               'mt-3 font-serif text-[88px] font-light italic leading-none tracking-[-0.04em] tabular-nums',
-              sessionActive ? 'text-ink' : 'text-ink-faint',
+              !sessionActive && 'text-ink-faint',
+              sessionActive && !isPaused && !goalReached && 'text-ink',
+              isPaused && 'text-cool-blue',
+              goalReached && !isPaused && 'text-amber',
             )}
           >
-            {sessionActive ? fmt(secondsLeft) : '--:--'}
+            {sessionActive ? fmt(secondsElapsed) : '--:--'}
           </div>
 
           <div className="mt-3 font-mono text-[11px] uppercase tracking-[0.14em] text-ink-faint">
-            {sessionActive ? 'remaining' : 'dock your phone to start a session'}
+            {sessionActive
+              ? `elapsed · goal ${profile.sessionLength}m`
+              : 'dock your phone to start a session'}
           </div>
+
+          {goalReached && !isPaused && (
+            <div className="mt-3 rounded border border-amber/40 bg-amber/10 px-4 py-2 font-mono text-[10px] uppercase tracking-[0.12em] text-amber">
+              session goal reached ✓
+            </div>
+          )}
 
           {sessionActive && (
             <div className="mt-4 flex items-center gap-3 font-mono text-[11px] tracking-wide text-ink-dim">
@@ -205,6 +231,22 @@ export function DashboardView({
                 </>
               )}
             </div>
+          )}
+
+          {sessionPausedAt && sessionActive && (
+            <PauseBudgetBanner
+              pausedAt={sessionPausedAt}
+              budgetMinutes={pauseBudgetMinutes}
+            />
+          )}
+
+          {sessionActive && (
+            <button
+              onClick={onEndSession}
+              className="mt-5 rounded border border-line-mid px-5 py-2 font-mono text-[10px] uppercase tracking-[0.12em] text-ink-faint transition-colors hover:border-red-500/40 hover:text-red-400"
+            >
+              End Session
+            </button>
           )}
 
         </div>
@@ -299,6 +341,35 @@ function ProfileAvatar({
   }
 
   return <PixelOrbMini color={color} pulse={pulse} />;
+}
+
+function PauseBudgetBanner({ pausedAt, budgetMinutes }: { pausedAt: string; budgetMinutes: number }) {
+  const elapsedMs = Date.now() - Date.parse(pausedAt);
+  const elapsedMin = Math.floor(elapsedMs / 60000);
+  const elapsedSec = Math.floor((elapsedMs % 60000) / 1000);
+  const budgetMs = budgetMinutes * 60 * 1000;
+  const remainingMs = Math.max(0, budgetMs - elapsedMs);
+  const remainingMin = Math.floor(remainingMs / 60000);
+  const remainingSec = Math.floor((remainingMs % 60000) / 1000);
+  const overBudget = elapsedMs >= budgetMs;
+
+  return (
+    <div className={cn(
+      'mt-4 rounded border px-4 py-3 font-mono text-[10px]',
+      overBudget
+        ? 'border-red-500/40 bg-red-500/10 text-red-400'
+        : 'border-amber/30 bg-amber/10 text-amber',
+    )}>
+      <div className="uppercase tracking-[0.12em]">
+        {overBudget ? 'pause budget exceeded — session ending' : 'session paused — overlay closed'}
+      </div>
+      <div className="mt-1 text-[9px] text-ink-faint">
+        {overBudget
+          ? `paused ${elapsedMin}m ${elapsedSec}s`
+          : `${remainingMin}m ${remainingSec}s remaining before auto-end`}
+      </div>
+    </div>
+  );
 }
 
 function Stat({ label, value, active = false }: { label: string; value: string; active?: boolean }) {

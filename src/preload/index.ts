@@ -24,6 +24,8 @@ const api = {
   createCohort: (userId: string, name: string) => ipcRenderer.invoke(CH.COHORT_CREATE, userId, name),
   joinCohort: (userId: string, inviteCode: string) => ipcRenderer.invoke(CH.COHORT_JOIN, userId, inviteCode),
   getSharedCohortProfiles: (userId: string) => ipcRenderer.invoke(CH.COHORT_SHARED_PROFILES, userId),
+  getCohortMembers: (cohortId: string) => ipcRenderer.invoke(CH.COHORT_MEMBERS, cohortId),
+  leaveCohort: (userId: string, cohortId: string) => ipcRenderer.invoke(CH.COHORT_LEAVE, userId, cohortId),
 
   // Sessions
   startSession: (userId: string, workflowGroup: string, durationMins: number) =>
@@ -80,6 +82,12 @@ const api = {
   // Hardware simulator
   simulateHardware: (userId: string, payload: Record<string, unknown>) =>
     ipcRenderer.invoke(CH.HW_SIMULATE, userId, payload),
+
+  onSessionPaused: (cb: (data: unknown) => void) => {
+    const h = (_e: Electron.IpcRendererEvent, data: unknown) => cb(data);
+    ipcRenderer.on(PUSH.SESSION_PAUSED, h);
+    return () => ipcRenderer.off(PUSH.SESSION_PAUSED, h);
+  },
 
   // Deep link
   onDeepLink: (cb: (url: string) => void) => {

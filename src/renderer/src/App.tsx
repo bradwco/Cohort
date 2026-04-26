@@ -77,13 +77,18 @@ function DashboardApp({
   const sessionLengthRef = useRef(profile.sessionLength);
 
   const [orbStatus, setOrbStatus] = useState<OrbStatus>('offline');
-  const [secondsLeft, setSecondsLeft] = useState(profile.sessionLength * 60);
+  const [secondsElapsed, setSecondsElapsed] = useState(0);
   const [liftCount, setLiftCount] = useState(0);
   const [totalPauseMs, setTotalPauseMs] = useState(0);
   const [currentWorkflow, setCurrentWorkflow] = useState('');
 
-  const [groups, setGroups] = useState<string[]>([]);
   const [activeGroup, setActiveGroup] = useState<string | null>(null);
+  const [sessionPausedAt, setSessionPausedAt] = useState<string | null>(null);
+
+  const pauseBudgetMinutes =
+    currentProfile.accountability === 'gentle' ? 10
+    : currentProfile.accountability === 'standard' ? 3
+    : 0;
 
   const [brightness, setBrightness] = useState(72);
   const [breathSpeed, setBreathSpeed] = useState(45);
@@ -98,10 +103,10 @@ function DashboardApp({
   }, [userId]);
 
   useEffect(() => {
-    if (orbStatus !== 'docked') return;
-    const id = setInterval(() => setSecondsLeft((s) => Math.max(0, s - 1)), 1000);
+    if (orbStatus !== 'docked' || sessionPausedAt !== null) return;
+    const id = setInterval(() => setSecondsElapsed((s) => s + 1), 1000);
     return () => clearInterval(id);
-  }, [orbStatus]);
+  }, [orbStatus, sessionPausedAt]);
 
   useEffect(() => {
     if (feedRef.current) feedRef.current.scrollTop = feedRef.current.scrollHeight;
@@ -125,8 +130,9 @@ function DashboardApp({
       pushTelemetry('focus-orb/own/state', data);
 
       if (data.status === 'docked') {
+        setSessionPausedAt(null);
         if (data.duration != null) {
-          setSecondsLeft(data.duration * 60);
+          setSecondsElapsed(0);
           setCurrentWorkflow(data.workflowGroup ?? '');
           setLiftCount(0);
           setTotalPauseMs(0);
@@ -147,16 +153,43 @@ function DashboardApp({
 
   function handleSessionEnd() {
     setOrbStatus('offline');
-    setSecondsLeft(sessionLengthRef.current * 60);
+    setSecondsElapsed(0);
     setLiftCount(0);
     setTotalPauseMs(0);
     setCurrentWorkflow('');
+    setSessionPausedAt(null);
   }
 
-  function handleAddGroup(name: string) {
-    setGroups((g) => (g.includes(name) ? g : [...g, name]));
-    setActiveGroup(name);
+  function handleEndSession() {
+    void window.api?.endSession(Math.round(totalPauseMs / 60000), 0, 'Ended from desktop');
+    handleSessionEnd();
   }
+
+  // Listen for overlay pause events
+  useEffect(() => {
+    if (!window.api?.onSessionPaused) return;
+    const cleanup = window.api.onSessionPaused((raw) => {
+      const { pausedAt } = raw as { pausedAt: string };
+      setSessionPausedAt(pausedAt);
+    });
+    return () => { cleanup(); };
+  }, []);
+
+  // Auto-end session when pause budget is exhausted
+  useEffect(() => {
+    if (!sessionPausedAt || orbStatus === 'offline') return;
+    if (pauseBudgetMinutes === 0) {
+      handleEndSession();
+      return;
+    }
+    const budgetMs = pauseBudgetMinutes * 60 * 1000;
+    const id = setInterval(() => {
+      if (Date.now() - Date.parse(sessionPausedAt) >= budgetMs) {
+        handleEndSession();
+      }
+    }, 1000);
+    return () => clearInterval(id);
+  }, [sessionPausedAt, orbStatus, pauseBudgetMinutes]); // eslint-disable-line react-hooks/exhaustive-deps
 
   function handleProfileUpdate(patch: Partial<OnboardingData>) {
     const next = {
@@ -169,9 +202,6 @@ function DashboardApp({
     saveOnboarding(next);
     sessionLengthRef.current = next.sessionLength;
     setCurrentProfile(next);
-    if (patch.sessionLength != null && orbStatus === 'offline') {
-      setSecondsLeft(next.sessionLength * 60);
-    }
   }
 
   return (
@@ -186,9 +216,7 @@ function DashboardApp({
       <HwSimulator
         userId={userId}
         activeGroup={activeGroup}
-        groups={groups}
         initialDuration={currentProfile.sessionLength}
-        onAddGroup={handleAddGroup}
         onSelectGroup={setActiveGroup}
         onSessionEnd={handleSessionEnd}
       />
@@ -214,12 +242,15 @@ function DashboardApp({
             <DashboardView
               userId={userId}
               profile={currentProfile}
-              secondsLeft={secondsLeft}
+              secondsElapsed={secondsElapsed}
               fmt={fmt}
               orbStatus={orbStatus}
               liftCount={liftCount}
               totalPauseMs={totalPauseMs}
               currentWorkflow={currentWorkflow}
+              sessionPausedAt={sessionPausedAt}
+              pauseBudgetMinutes={pauseBudgetMinutes}
+              onEndSession={handleEndSession}
             />
           )}
           {activeView === 'history' && <HistoryView userId={userId} />}

@@ -20,6 +20,7 @@ function loadEnv() {
 }
 
 const env = loadEnv();
+let activePlannedDurationMinutes = 50;
 
 function getStoredUserId() {
   try {
@@ -38,15 +39,17 @@ ipcMain.on('set-ignore-mouse-events', (event, ignore) => {
 });
 
 ipcMain.handle('get-config', () => ({
-  GEMINI_API_KEY:    env.GEMINI_API_KEY    || '',
-  LOCAL_VLM_URL:     env.LOCAL_VLM_URL     || 'http://127.0.0.1:11434/api/chat',
-  LOCAL_VLM_MODEL:   env.LOCAL_VLM_MODEL   || 'moondream',
-  SUPABASE_URL:      env.SUPABASE_URL      || '',
-  SUPABASE_ANON_KEY: env.SUPABASE_ANON_KEY || '',
-  USER_ID:           getStoredUserId()     || '',
+  GEMINI_API_KEY:            env.GEMINI_API_KEY    || '',
+  LOCAL_VLM_URL:             env.LOCAL_VLM_URL     || 'http://127.0.0.1:11434/api/chat',
+  LOCAL_VLM_MODEL:           env.LOCAL_VLM_MODEL   || 'moondream',
+  SUPABASE_URL:              env.SUPABASE_URL      || '',
+  SUPABASE_ANON_KEY:         env.SUPABASE_ANON_KEY || '',
+  USER_ID:                   getStoredUserId()     || '',
+  PLANNED_DURATION_MINUTES:  activePlannedDurationMinutes,
 }));
 
 ipcMain.handle('create-session', async (_event, { plannedDurationMinutes, workflowGroup }) => {
+  activePlannedDurationMinutes = plannedDurationMinutes || activePlannedDurationMinutes;
   const url    = (env.SUPABASE_URL || '').replace(/\/$/, '');
   const key    = env.SUPABASE_ANON_KEY || '';
   const userId = getStoredUserId();
@@ -71,6 +74,10 @@ ipcMain.handle('create-session', async (_event, { plannedDurationMinutes, workfl
   if (!resp.ok) throw new Error(`Supabase create-session ${resp.status}: ${await resp.text()}`);
   const rows = await resp.json();
   return rows[0]?.id ?? null;
+});
+
+ipcMain.handle('pause-session', () => {
+  // No-op in standalone mode; just signals the overlay to close
 });
 
 ipcMain.handle('end-session', async (_event, { sessionId, flowScore, conversationHistory }) => {

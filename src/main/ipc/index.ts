@@ -15,7 +15,9 @@ import {
   getCohorts,
   createCohort,
   joinCohort,
+  leaveCohort,
   getSharedCohortProfiles,
+  getCohortMembers,
   startSession,
   endSession,
   getSessionHistory,
@@ -31,6 +33,8 @@ import {
   getActiveSessionId,
   simulateHardwareEvent,
 } from '../mqtt';
+
+let activePlannedDurationMinutes = 50;
 
 export function registerIpcHandlers(): void {
   ipcMain.handle(CH.PING, () => 'pong');
@@ -61,11 +65,22 @@ export function registerIpcHandlers(): void {
   ipcMain.handle(CH.COHORT_CREATE, (_e, userId: string, name: string) => createCohort(userId, name));
   ipcMain.handle(CH.COHORT_JOIN, (_e, userId: string, inviteCode: string) => joinCohort(userId, inviteCode));
   ipcMain.handle(CH.COHORT_SHARED_PROFILES, (_e, userId: string) => getSharedCohortProfiles(userId));
+  ipcMain.handle(CH.COHORT_MEMBERS, (_e, cohortId: string) => getCohortMembers(cohortId));
+  ipcMain.handle(CH.COHORT_LEAVE, (_e, userId: string, cohortId: string) => leaveCohort(userId, cohortId));
+
+  // Overlay pause (closes overlay and notifies desktop renderer)
+  ipcMain.handle('pause-session', () => {
+    const pausedAt = new Date().toISOString();
+    for (const win of BrowserWindow.getAllWindows()) {
+      win.webContents.send(PUSH.SESSION_PAUSED, { pausedAt });
+    }
+  });
 
   // Sessions
   ipcMain.handle(
     CH.SESSION_START,
     async (_e, userId: string, workflowGroup: string, durationMins: number) => {
+      activePlannedDurationMinutes = durationMins;
       const session = await startSession(userId, workflowGroup, durationMins);
       if (session) setActiveSessionId(session.id);
       return session;
@@ -132,11 +147,13 @@ export function registerIpcHandlers(): void {
     SUPABASE_ANON_KEY: (import.meta.env.SUPABASE_ANON_KEY as string) ?? '',
     USER_ID: getOverlayUserId(),
     SESSION_ID: getActiveSessionId() ?? '',
+    PLANNED_DURATION_MINUTES: activePlannedDurationMinutes,
   }));
 
   ipcMain.handle('create-session', async (_e, { plannedDurationMinutes, workflowGroup }: { plannedDurationMinutes: number; workflowGroup: string }) => {
     const userId = getOverlayUserId();
     if (!userId) return null;
+    activePlannedDurationMinutes = plannedDurationMinutes;
     const session = await startSession(userId, workflowGroup, plannedDurationMinutes);
     if (session) setActiveSessionId(session.id);
     return session?.id ?? null;

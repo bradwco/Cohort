@@ -16,14 +16,20 @@ type ProfileRow = {
   orb_color: string;
 };
 
+type CohortRow = {
+  id: string;
+  name: string;
+  invite_code: string;
+  owner_id: string;
+  member_count?: number;
+};
+
 const NOTE_LIMIT = 80;
 
 type Props = {
   userId: string | null;
   activeGroup: string | null;
-  groups: string[];
   initialDuration?: number;
-  onAddGroup: (name: string) => void;
   onSelectGroup: (name: string) => void;
   onSessionEnd: () => void;
 };
@@ -31,23 +37,34 @@ type Props = {
 export function HwSimulator({
   userId: currentUserId,
   activeGroup,
-  groups,
   initialDuration = 60,
-  onAddGroup,
   onSelectGroup,
   onSessionEnd,
 }: Props) {
   const [open, setOpen] = useState(false);
+  const [cohorts, setCohorts] = useState<CohortRow[]>([]);
+  const [cohortsLoaded, setCohortsLoaded] = useState(false);
   const [users, setUsers] = useState<SimUser[]>([]);
   const [userId, setUserId] = useState('');
   const [duration, setDuration] = useState(initialDuration);
   const [status, setStatus] = useState<OrbStatus>('offline');
   const [log, setLog] = useState<string[]>([]);
-  const [newGroupInput, setNewGroupInput] = useState('');
   const [sessionStartedAt, setSessionStartedAt] = useState<string | null>(null);
   const [sessionDuration, setSessionDuration] = useState(initialDuration);
   const [sessionWorkflow, setSessionWorkflow] = useState<string>('Focus Session');
   const [sessionNote, setSessionNote] = useState('');
+
+  useEffect(() => {
+    if (!window.api || !currentUserId) return;
+    void window.api.getCohorts(currentUserId).then((rows) => {
+      const list = (rows as CohortRow[]) ?? [];
+      setCohorts(list);
+      setCohortsLoaded(true);
+      if (list.length > 0 && !activeGroup) {
+        onSelectGroup(list[0]!.name);
+      }
+    });
+  }, [currentUserId]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     if (!window.api || !currentUserId) return;
@@ -124,14 +141,13 @@ export function HwSimulator({
 
   async function dock() {
     const trimmedNote = sessionNote.trim();
-    if (!trimmedNote) return;
+    if (!trimmedNote || !activeGroup) return;
 
     const nextStartedAt = sessionStartedAt ?? new Date().toISOString();
-    const nextWorkflow = trimmedNote;
     const payload = {
       status: 'docked',
       duration,
-      workflowGroup: nextWorkflow,
+      workflowGroup: trimmedNote,
       sessionStartedAt: nextStartedAt,
       plannedDurationMinutes: sessionDuration || duration,
     };
@@ -140,7 +156,7 @@ export function HwSimulator({
       setStatus('docked');
       setSessionStartedAt(nextStartedAt);
       setSessionDuration(duration);
-      setSessionWorkflow(nextWorkflow);
+      setSessionWorkflow(trimmedNote);
     }
   }
 
@@ -202,15 +218,9 @@ export function HwSimulator({
     push(`OK nudge -> ${currentUserId}`);
   }
 
-  function submitNewGroup(e: React.FormEvent<HTMLFormElement>) {
-    e.preventDefault();
-    const trimmed = newGroupInput.trim();
-    if (!trimmed) return;
-    onAddGroup(trimmed);
-    setNewGroupInput('');
-  }
-
   const user = users.find((u) => u.id === userId);
+  const noCohorts = cohortsLoaded && cohorts.length === 0;
+  const canDock = status !== 'docked' && !!userId && !!sessionNote.trim() && !!activeGroup && cohorts.length > 0;
 
   return (
     <div className="fixed bottom-5 left-5 z-[100] font-mono">
@@ -237,6 +247,7 @@ export function HwSimulator({
         >
           <div className="mb-3 text-[9px] uppercase tracking-widest text-ink-faint">Hardware Simulator</div>
 
+          {/* Simulate as */}
           <div className="mb-3">
             <div className="mb-1 text-[9px] text-ink-faint">simulate as</div>
             <div className="flex flex-wrap gap-1.5">
@@ -265,48 +276,39 @@ export function HwSimulator({
             </div>
           </div>
 
+          {/* Cohort selector */}
           <div className="mb-3">
-            <div className="mb-1 text-[9px] text-ink-faint">group / squad</div>
-            {groups.length > 0 && (
-              <div className="mb-1.5 flex flex-wrap gap-1">
-                {groups.map((g) => (
+            <div className="mb-1 text-[9px] text-ink-faint">session cohort</div>
+            {!cohortsLoaded && (
+              <div className="text-[9px] text-ink-faint">loading cohorts...</div>
+            )}
+            {noCohorts && (
+              <div className="rounded border border-amber/30 bg-amber/10 px-2.5 py-1.5 text-[9px] text-amber">
+                join or create a cohort in the Friends tab first
+              </div>
+            )}
+            {cohorts.length > 0 && (
+              <div className="flex flex-wrap gap-1">
+                {cohorts.map((c) => (
                   <button
-                    key={g}
-                    onClick={() => onSelectGroup(g)}
+                    key={c.id}
+                    onClick={() => onSelectGroup(c.name)}
+                    disabled={status === 'docked'}
                     className={cn(
-                      'rounded border px-2 py-1 text-[9px] transition-colors',
-                      activeGroup === g
+                      'rounded border px-2 py-1 text-[9px] transition-colors disabled:pointer-events-none',
+                      activeGroup === c.name
                         ? 'border-amber/60 bg-amber/10 text-amber'
                         : 'border-line-mid text-ink-dim hover:text-ink',
                     )}
                   >
-                    {g}
+                    {c.name}
                   </button>
                 ))}
               </div>
             )}
-            <form onSubmit={submitNewGroup} className="flex gap-1">
-              <input
-                value={newGroupInput}
-                onChange={(e) => setNewGroupInput(e.target.value)}
-                placeholder="new group..."
-                className="min-w-0 flex-1 rounded border border-line-mid bg-white/[0.04] px-2 py-1 text-[9px] text-ink placeholder-ink-faint outline-none focus:border-amber/40"
-              />
-              <button
-                type="submit"
-                disabled={!newGroupInput.trim()}
-                className="rounded border border-line-mid px-2 py-1 text-[9px] text-ink-dim transition-colors hover:text-ink disabled:opacity-30"
-              >
-                +
-              </button>
-            </form>
-            {activeGroup && (
-              <div className="mt-1 truncate text-[8px] text-ink-faint">
-                docking as <span className="text-amber">{activeGroup}</span>
-              </div>
-            )}
           </div>
 
+          {/* Note */}
           <div className="mb-3">
             <div className="mb-1 flex items-center justify-between text-[9px] text-ink-faint">
               <span>note / what you are doing</span>
@@ -317,13 +319,14 @@ export function HwSimulator({
               maxLength={NOTE_LIMIT}
               onChange={(e) => {
                 setSessionNote(e.target.value);
-                if (status === 'offline') setSessionWorkflow(e.target.value.trim() || 'Focus Session');
+                if (status === 'offline') setSessionWorkflow(e.target.value.trim() || activeGroup || 'Focus Session');
               }}
               placeholder="e.g. finish econ problem set"
               className="h-16 w-full resize-none rounded border border-line-mid bg-white/[0.04] px-2 py-1.5 text-[9px] leading-4 text-ink placeholder-ink-faint outline-none focus:border-amber/40"
             />
           </div>
 
+          {/* Duration */}
           <div className="mb-3">
             <div className="mb-1 text-[9px] text-ink-faint">session duration (min)</div>
             <div className="flex gap-1.5">
@@ -347,6 +350,7 @@ export function HwSimulator({
             </div>
           </div>
 
+          {/* Status */}
           <div className="mb-3 flex items-center gap-2">
             <span
               className={cn(
@@ -359,9 +363,10 @@ export function HwSimulator({
             <span className="text-[10px] text-ink">{user?.label ?? 'No profile loaded'} / {status}</span>
           </div>
 
+          {/* Controls */}
           <div className="mb-2 grid grid-cols-2 gap-1.5">
             <button
-              disabled={status === 'docked' || !userId || !sessionNote.trim()}
+              disabled={!canDock}
               onClick={dock}
               className="rounded border border-amber/40 bg-amber/10 px-2 py-1.5 text-[10px] text-amber transition-opacity disabled:opacity-30"
             >
